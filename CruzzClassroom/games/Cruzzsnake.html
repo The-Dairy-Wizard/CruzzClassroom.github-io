@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Google Snake 1:1 REPLICA</title>
+    <style>
+        :root {
+            --header-green: #4a752c;
+            --grass-light: #aad751;
+            --grass-dark: #a2d149;
+            --snake-body: #527ff2;
+        }
+
+        body {
+            background-color: #4e7cf6;
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            font-family: 'Roboto', Arial, sans-serif;
+            color: white;
+            overflow: hidden;
+            user-select: none;
+        }
+
+        .game-wrapper {
+            background-color: var(--header-green);
+            border-radius: 12px;
+            box-shadow: 0 25px 60px rgba(0,0,0,0.5);
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            max-height: 98vh; 
+        }
+
+        .header {
+            height: 60px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 25px;
+            font-size: 24px;
+            font-weight: bold;
+            flex-shrink: 0;
+        }
+
+        .settings-btn { cursor: pointer; font-size: 30px; z-index: 101; }
+
+        .overlay {
+            position: absolute;
+            top: 60px;
+            left: 0;
+            width: 100%;
+            height: calc(100% - 60px);
+            background: rgba(0, 0, 0, 0.9);
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+        }
+
+        .settings-content { width: 90%; max-width: 450px; text-align: center; }
+        .setting-row { display: flex; justify-content: center; gap: 10px; margin-bottom: 15px; }
+        
+        /* Smaller Labels */
+        .label { 
+            font-size: 11px; 
+            text-transform: uppercase; 
+            margin-bottom: 5px; 
+            color: #ccc; 
+            letter-spacing: 1.5px; 
+        }
+
+        .opt {
+            background: #578a34;
+            width: 50px;
+            height: 50px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 10px;
+            cursor: pointer;
+            border: 3px solid transparent;
+            transition: 0.2s;
+        }
+        
+        /* Smaller Font for S/M/L buttons */
+        .opt-text { font-size: 14px; font-weight: bold; }
+        .opt-emoji { font-size: 24px; }
+        
+        .opt.active { border-color: white; background: var(--grass-light); }
+
+        .play-btn {
+            background: white;
+            color: black;
+            border: none;
+            padding: 12px 60px;
+            border-radius: 30px;
+            font-weight: bold;
+            cursor: pointer;
+            font-size: 18px;
+            margin-top: 10px;
+        }
+
+        .death-card { background: #4a752c; padding: 30px; border-radius: 20px; text-align: center; }
+
+        canvas { display: block; width: 100%; height: auto; }
+    </style>
+</head>
+<body>
+
+    <div class="game-wrapper" id="container">
+        <div class="header">
+            <div>🍎 <span id="score">0</span></div>
+            <div class="settings-btn" id="gearBtn">⚙️</div>
+            <div>🏆 <span id="high">0</span></div>
+        </div>
+
+        <div id="settings-overlay" class="overlay">
+            <div class="settings-content">
+                <div class="label">Fruit</div>
+                <div class="setting-row" id="fruitRow">
+                    <div class="opt active" data-val="🍎"><span class="opt-emoji">🍎</span></div>
+                    <div class="opt" data-val="🍇"><span class="opt-emoji">🍇</span></div>
+                    <div class="opt" data-val="🍍"><span class="opt-emoji">🍍</span></div>
+                </div>
+                <div class="label">Speed</div>
+                <div class="setting-row" id="speedRow">
+                    <div class="opt" data-val="140"><span class="opt-emoji">🐢</span></div>
+                    <div class="opt active" data-val="90"><span class="opt-emoji">🏃</span></div>
+                    <div class="opt" data-val="50"><span class="opt-emoji">⚡</span></div>
+                </div>
+                <div class="label">Size</div>
+                <div class="setting-row" id="sizeRow">
+                    <div class="opt" data-val="10"><span class="opt-text">S</span></div>
+                    <div class="opt active" data-val="16"><span class="opt-text">M</span></div>
+                    <div class="opt" data-val="24"><span class="opt-text">L</span></div>
+                </div>
+                <button class="play-btn" id="playBtn">PLAY</button>
+            </div>
+        </div>
+
+        <div id="death-overlay" class="overlay">
+            <div class="death-card">
+                <div style="display:flex; gap:30px; font-size:36px; margin-bottom:20px; justify-content:center; font-weight:bold;">
+                    <div>🍎 <span id="finalScore">0</span></div>
+                    <div>🏆 <span id="finalBest">0</span></div>
+                </div>
+                <div style="display:flex; gap:15px; justify-content:center;">
+                    <button class="opt" id="retryBtn" style="width:60px; height:60px;"><span class="opt-emoji">▶️</span></button>
+                    <button class="opt" id="deathSettingsBtn" style="width:60px; height:60px;"><span class="opt-emoji">⚙️</span></button>
+                </div>
+            </div>
+        </div>
+
+        <canvas id="game"></canvas>
+    </div>
+
+<script>
+    const canvas = document.getElementById('game');
+    const ctx = canvas.getContext('2d');
+    const headImg = new Image();
+    headImg.src = 'https://core-docs.s3.amazonaws.com/oregon_city_school_district_62_ar/directory/205899160/small_a5fa43fe-97da-4562-9943-37f20b4870c8.png';
+
+    let config = { fruit: '🍎', speed: 90, size: 16 };
+    let snake, apple, d, nextD, score = 0, high = 0, loop, isRunning = false;
+    
+    function updateLayout() {
+        const headerHeight = 60;
+        const padding = 20;
+        const availableHeight = window.innerHeight - headerHeight - padding;
+        const availableWidth = window.innerWidth - padding;
+        const size = Math.min(availableHeight, availableWidth);
+        
+        canvas.width = size;
+        canvas.height = size;
+        document.getElementById('container').style.width = size + 'px';
+    }
+
+    function openSettings() {
+        isRunning = false;
+        document.getElementById('settings-overlay').style.display = 'flex';
+        document.getElementById('death-overlay').style.display = 'none';
+        updateLayout();
+    }
+
+    function startGame() {
+        document.getElementById('settings-overlay').style.display = 'none';
+        document.getElementById('death-overlay').style.display = 'none';
+        updateLayout();
+        snake = [{x: 5, y: 5}, {x: 4, y: 5}, {x: 3, y: 5}];
+        spawnApple();
+        d = 'RIGHT'; nextD = 'RIGHT';
+        score = 0;
+        document.getElementById('score').innerText = 0;
+        isRunning = true;
+        clearInterval(loop);
+        loop = setInterval(step, config.speed);
+    }
+
+    document.getElementById('gearBtn').onclick = openSettings;
+    document.getElementById('playBtn').onclick = startGame;
+    document.getElementById('retryBtn').onclick = startGame;
+    document.getElementById('deathSettingsBtn').onclick = openSettings;
+
+    function setupToggle(rowId, configKey) {
+        document.getElementById(rowId).querySelectorAll('.opt').forEach(opt => {
+            opt.onclick = () => {
+                document.getElementById(rowId).querySelectorAll('.opt').forEach(o => o.classList.remove('active'));
+                opt.classList.add('active');
+                let val = opt.dataset.val;
+                config[configKey] = isNaN(val) ? val : parseInt(val);
+                updateLayout();
+            };
+        });
+    }
+
+    setupToggle('fruitRow', 'fruit');
+    setupToggle('speedRow', 'speed');
+    setupToggle('sizeRow', 'size');
+
+    window.addEventListener('keydown', e => {
+        if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key)) e.preventDefault();
+        if (e.key === 'ArrowUp' && d !== 'DOWN') nextD = 'UP';
+        if (e.key === 'ArrowDown' && d !== 'UP') nextD = 'DOWN';
+        if (e.key === 'ArrowLeft' && d !== 'RIGHT') nextD = 'LEFT';
+        if (e.key === 'ArrowRight' && d !== 'LEFT') nextD = 'RIGHT';
+    });
+
+    function spawnApple() {
+        while(true) {
+            apple = { x: Math.floor(Math.random()*config.size), y: Math.floor(Math.random()*config.size) };
+            if (!snake.some(s => s.x === apple.x && s.y === apple.y)) break;
+        }
+    }
+
+    function step() {
+        if (!isRunning) return;
+        d = nextD;
+        let head = { ...snake[0] };
+        if (d === 'UP') head.y--; if (d === 'DOWN') head.y++;
+        if (d === 'LEFT') head.x--; if (d === 'RIGHT') head.x++;
+
+        if (head.x < 0 || head.x >= config.size || head.y < 0 || head.y >= config.size || snake.some(s => s.x === head.x && s.y === head.y)) {
+            isRunning = false;
+            document.getElementById('finalScore').innerText = score;
+            document.getElementById('finalBest').innerText = high;
+            document.getElementById('death-overlay').style.display = 'flex';
+            return;
+        }
+
+        snake.unshift(head);
+        if (head.x === apple.x && head.y === apple.y) {
+            score++;
+            document.getElementById('score').innerText = score;
+            if (score > high) { high = score; document.getElementById('high').innerText = high; }
+            spawnApple();
+        } else {
+            snake.pop();
+        }
+        render();
+    }
+
+    function render() {
+        const s = canvas.width / config.size;
+        for (let i = 0; i < config.size; i++) {
+            for (let j = 0; j < config.size; j++) {
+                ctx.fillStyle = (i + j) % 2 === 0 ? '#aad751' : '#a2d149';
+                ctx.fillRect(i * s, j * s, s, s);
+            }
+        }
+
+        ctx.font = `${s * 0.7}px Arial`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(config.fruit, apple.x * s + s/2, apple.y * s + s/2);
+
+        ctx.strokeStyle = '#527ff2';
+        ctx.lineWidth = s * 0.75; // Body scales with board size
+        ctx.lineCap = "round";
+        ctx.lineJoin = "round";
+        ctx.beginPath();
+        ctx.moveTo(snake[0].x * s + s/2, snake[0].y * s + s/2);
+        for(let i = 1; i < snake.length; i++) {
+            ctx.lineTo(snake[i].x * s + s/2, snake[i].y * s + s/2);
+        }
+        ctx.stroke();
+
+        ctx.save();
+        ctx.translate(snake[0].x * s + s/2, snake[0].y * s + s/2);
+        if (d === 'DOWN') ctx.rotate(Math.PI);
+        if (d === 'LEFT') ctx.rotate(-Math.PI / 2);
+        if (d === 'RIGHT') ctx.rotate(Math.PI / 2);
+        
+        ctx.beginPath();
+        ctx.arc(0, 0, s/2 - 1, 0, Math.PI * 2);
+        ctx.clip();
+        ctx.drawImage(headImg, -s/2, -s/2, s, s);
+        ctx.restore();
+    }
+
+    window.onresize = updateLayout;
+    openSettings();
+</script>
+</body>
+</html>

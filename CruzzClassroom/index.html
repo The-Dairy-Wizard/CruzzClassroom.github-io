@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CruzzClassroom | The Great Archive</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700&family=Playfair+Display:ital,wght@0,400;1,700&family=Special+Elite&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="overlay"></div>
+
+    <div id="announcement-banner" style="display: none;">
+        <span id="announcement-text"></span>
+        <button onclick="closeAnnouncement()">✖</button>
+    </div>
+
+    <div id="admin-modal" style="display: none;">
+        <div class="chalkboard admin-box">
+            <h2 class="status-text">HEADMASTER LOGIN</h2>
+            <input type="password" id="admin-pass" placeholder="Enter Password...">
+            <button class="play-btn" onclick="verifyAdmin()">Login</button>
+            <button class="back-btn" onclick="closeAdmin()">Cancel</button>
+            
+            <div id="admin-panel" style="display: none; margin-top: 20px;">
+                <textarea id="announcement-input" placeholder="Type new announcement..."></textarea>
+                <button class="play-btn" onclick="postAnnouncement()">Broadcast</button>
+                <button class="back-btn" onclick="clearAnnouncement()">Clear Current</button>
+            </div>
+        </div>
+    </div>
+    
+    <div class="classroom-container">
+        <header>
+            <h1 class="logo" ondblclick="openAdmin()">CRUZZ CLASSROOM</h1>
+            <div class="divider"></div>
+        </header>
+
+        <main class="content">
+            <div id="library-view">
+                <h2 class="status-text">THE GREAT ARCHIVE</h2>
+                <p class="announcement">Select an exhibit from the chronicles below.</p>
+                
+                <ul class="game-list">
+                    <li class="game-item">
+                        <span class="game-title">Balloon Defender</span>
+                        <button class="play-btn" onclick="openDetails('balloon')">View Exhibit</button>
+                    </li>
+                    <li class="game-item">
+                        <span class="game-title">CruzzSurvival</span>
+                        <button class="play-btn" onclick="openDetails('survival')">View Exhibit</button>
+                    </li>
+                    <li class="game-item">
+                        <span class="game-title">CruzzBlast</span>
+                        <button class="play-btn" onclick="openDetails('blast')">View Exhibit</button>
+                    </li>
+                    <li class="game-item">
+                        <span class="game-title">Cruzz Snake</span>
+                        <button class="play-btn" onclick="openDetails('snake')">View Exhibit</button>
+                    </li>
+                </ul>
+            </div>
+
+            <div id="details-view" style="display: none;">
+                <button class="back-btn" onclick="returnToLibrary()">← Return to Library</button>
+                <div class="chalkboard details-box">
+                    <h2 id="detail-title" class="status-text"></h2>
+                    <div id="detail-description" class="desc-content"></div>
+                    <button class="play-btn launch-btn" onclick="launchFullscreen()">COMMENCE SIMULATION</button>
+                </div>
+            </div>
+
+            <div id="player-view" style="display: none;">
+                <div class="game-frame-container" id="fullscreen-wrapper">
+                    
+                    <div id="pause-guard" style="display: none;">
+                        <h2 class="status-text" style="color: #ef4444;">EXHIBIT PAUSED</h2>
+                        <p style="font-family: 'Special Elite', cursive; margin-bottom: 20px;">This simulation requires maximum focus (Fullscreen).</p>
+                        <button class="play-btn" onclick="resumeFullscreen()">RESUME FULLSCREEN</button>
+                        <button class="back-btn" onclick="closeGame()" style="margin-left: 10px;">ABORT</button>
+                    </div>
+
+                    <iframe 
+                        id="game-engine" 
+                        sandbox="allow-scripts allow-forms allow-modals allow-same-origin" 
+                        allow="fullscreen"
+                        src="">
+                    </iframe>
+                </div>
+            </div>
+        </main>
+
+        <footer>
+            <p>&copy; 2026 CruzzClassroom Academy</p>
+        </footer>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>

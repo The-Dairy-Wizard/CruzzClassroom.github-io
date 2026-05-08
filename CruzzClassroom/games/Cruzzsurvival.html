@@ -1,0 +1,583 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>CRUZZ SURVIVOR: FINAL EDITION</title>
+    <style>
+        body { margin: 0; background: #020202; color: #00f2ff; font-family: 'Segoe UI', sans-serif; overflow: hidden; user-select: none; }
+        .overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 100; }
+        #main-menu { background: radial-gradient(circle, #1a1a1a 0%, #000 100%); }
+        #choice-menu, #trade-menu { background: rgba(0,0,0,0.96); display: none; z-index: 180; }
+        #death-screen { background: rgba(20, 0, 0, 0.9); display: none; z-index: 200; border: 5px solid #ff0000; }
+        #pause-menu { background: rgba(0,0,0,0.8); display: none; z-index: 150; }
+        
+        h1 { font-size: 60px; text-transform: uppercase; letter-spacing: 5px; color: #ff00ff; text-shadow: 0 0 20px #ff00ff; margin: 0; }
+        .btn { padding: 15px 40px; background: transparent; border: 2px solid #00f2ff; color: #00f2ff; font-size: 20px; cursor: pointer; text-transform: uppercase; transition: 0.2s; font-weight: bold; margin-top: 20px; }
+        .btn:hover { background: #00f2ff; color: #000; box-shadow: 0 0 20px #00f2ff; }
+        
+        .class-card { width: 140px; padding: 15px; background: #111; border: 2px solid #333; cursor: pointer; text-align: center; border-radius: 8px; margin: 5px; transition: 0.3s; }
+        .class-card.selected { border-color: #ff00ff; background: #202; transform: scale(1.05); }
+        
+        .common { border-color: #00ff66 !important; color: #00ff66 !important; }
+        .rare { border-color: #0099ff !important; color: #0099ff !important; }
+        .epic { border-color: #aa00ff !important; color: #aa00ff !important; }
+        .legendary { border-color: #ffcc00 !important; color: #ffcc00 !important; text-shadow: 0 0 10px #ffcc00; }
+        .trade-rare { border-color: #ff0055 !important; color: #ff0055 !important; text-shadow: 0 0 15px #ff0055; box-shadow: inset 0 0 20px rgba(255,0,85,0.2); }
+
+        #hp-bar-v { position: absolute; left: 20px; top: 50%; transform: translateY(-50%); width: 22px; height: 300px; background: rgba(255,255,255,0.05); border: 2px solid #333; border-radius: 12px; overflow: hidden; }
+        #hp-fill-v { position: absolute; bottom: 0; width: 100%; height: 100%; background: linear-gradient(to top, #ff0000, #ff4d4d); transition: 0.3s; }
+        
+        #hud-top { position: absolute; top: 20px; left: 50%; transform: translateX(-50%); width: 60%; }
+        #xp-container { width: 100%; height: 10px; background: rgba(0,0,0,0.5); border: 1px solid #00f2ff; border-radius: 5px; overflow: hidden; }
+        #xp-fill { width: 0%; height: 100%; background: #00f2ff; box-shadow: 0 0 10px #00f2ff; }
+        
+        #ability-bar-container { position: absolute; bottom: 100px; left: 50%; transform: translateX(-50%); width: 200px; height: 8px; background: #111; border: 1px solid #ff00ff; border-radius: 4px; }
+        #ability-fill { width: 0%; height: 100%; background: #ff00ff; box-shadow: 0 0 8px #ff00ff; transition: 0.1s; }
+
+        #powerup-slots { position: absolute; bottom: 20px; left: 60px; display: flex; gap: 8px; align-items: center; }
+        .slot { width: 60px; height: 60px; border: 2px solid #222; background: rgba(0,0,0,0.8); display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 9px; text-align: center; border-radius: 4px; color: #444; position: relative; }
+        .stack-badge { position: absolute; top: -5px; right: -5px; background: #ff00ff; color: #fff; font-size: 10px; font-weight: bold; padding: 2px 5px; border-radius: 10px; display: none; }
+        
+        .aug-card { width: 180px; padding: 15px; background: #000; border: 2px solid #fff; cursor: pointer; text-align: center; border-radius: 8px; transition: 0.2s; }
+        .aug-card:hover { transform: translateY(-10px); }
+        canvas { display: block; cursor: crosshair; }
+    </style>
+</head>
+<body>
+    <div id="main-menu" class="overlay">
+        <h1>CRUZZ SURVIVOR</h1>
+        <p style="color:#fff; letter-spacing:3px;">FINAL EDITION</p>
+        <div style="display:flex" id="class-list">
+            <div class="class-card selected" onclick="selClass('speed', this)"><h3>SPEED</h3><p>Fast Move<br>Low HP</p></div>
+            <div class="class-card" onclick="selClass('tank', this)"><h3>TANK</h3><p>Huge HP<br>Slow Move</p></div>
+            <div class="class-card" onclick="selClass('power', this)"><h3>POWER</h3><p>High DMG<br>Slow Rate</p></div>
+        </div>
+        <button class="btn" onclick="init()">INITIATE COMBAT</button>
+    </div>
+
+    <div id="pause-menu" class="overlay">
+        <h1 style="color:#00f2ff">PAUSED</h1>
+        <button class="btn" onclick="togglePause()">RESUME</button>
+    </div>
+
+    <div id="death-screen" class="overlay">
+        <h1 style="color:#ff0000">CRITICAL FAILURE</h1>
+        <p style="color:#fff; font-size:24px;">SURVIVED <span id="final-wave">0</span> WAVES</p>
+        <button class="btn" onclick="location.reload()">REBOOT SYSTEM</button>
+    </div>
+
+    <div id="choice-menu" class="overlay">
+        <h2 style="color:#fff">EVOLUTION DETECTED</h2>
+        <div style="display:flex; gap:15px;" id="aug-container"></div>
+        <div id="replace-ui" style="display:none; margin-top:20px; text-align:center;">
+            <p style="color:#ff00ff">PASSIVE SLOTS FULL. OVERWRITE ONE?</p>
+            <div id="replace-buttons"></div>
+            <button class="btn" style="font-size:12px; border-color:#666; color:#ccc" onclick="closeMenu('choice-menu')">CANCEL / DISCARD</button>
+        </div>
+    </div>
+
+    <div id="trade-menu" class="overlay">
+        <h2 style="color:#ff0055; text-shadow: 0 0 20px #ff0055;">BLACK MARKET TRADE</h2>
+        <p style="color:#aaa; font-size:14px; margin-bottom: 20px;">CORE ACCEPTED. SELECT AN ACTIVE ABILITY.</p>
+        <div style="display:flex; gap:15px;" id="trade-container"></div>
+        <button class="btn" style="font-size:12px; border-color:#666; color:#ccc" onclick="closeMenu('trade-menu')">LEAVE</button>
+    </div>
+
+    <div id="game-ui" style="display:none">
+        <div id="hp-bar-v"><div id="hp-fill-v"></div></div>
+        <div id="hud-top">
+            <div id="xp-container"><div id="xp-fill"></div></div>
+            <div style="display:flex; justify-content:space-between; font-family:monospace; font-size:18px; margin-top:5px;">
+                <span>LVL <span id="lvl-txt">1</span></span>
+                <span id="ability-txt" style="color:#ff00ff; font-weight:bold; visibility:hidden;">SPACE READY</span>
+                <span style="color:#ff00ff">WAVE <span id="wave-txt">0</span></span>
+            </div>
+        </div>
+        <div id="ability-bar-container"><div id="ability-fill"></div></div>
+        <div id="powerup-slots">
+            <div class="slot" id="s0"><span class="stack-badge" id="b0"></span><span id="t0">--</span></div>
+            <div class="slot" id="s1"><span class="stack-badge" id="b1"></span><span id="t1">--</span></div>
+            <div class="slot" id="s2"><span class="stack-badge" id="b2"></span><span id="t2">--</span></div>
+            <div class="slot" id="s3"><span class="stack-badge" id="b3"></span><span id="t3">--</span></div>
+            <div class="slot" id="s4"><span class="stack-badge" id="b4"></span><span id="t4">--</span></div>
+            
+            <div style="width: 2px; height: 60px; background: #444; margin: 0 10px;"></div>
+            <div class="slot" id="s-ab" style="border-color:#ff00ff; box-shadow: 0 0 10px rgba(255,0,255,0.2);">
+                <span style="color:#ff00ff; margin-bottom: 2px;">SPACE</span>
+                <span id="t-ab">EMPTY</span>
+            </div>
+        </div>
+    </div>
+    <canvas id="canvas"></canvas>
+
+<script>
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+const cruzzImg = new Image();
+cruzzImg.src = 'https://core-docs.s3.amazonaws.com/oregon_city_school_district_62_ar/directory/205899160/small_a5fa43fe-97da-4562-9943-37f20b4870c8.png';
+
+let player = { x: 0, y: 0, hp: 100, maxHp: 100, lvl: 1, xp: 0, nextXp: 100, speed: 4, bSpeed: 4, r: 25, leech: 0, mag: 180, armor: 0, dead: false, shake: 0, abCharge: 0, abMax: 1000, abSpeed: 1, shielded: 0 };
+let weapon = { rate: 25, bRate: 25, count: 1, dmg: 25, bDmg: 25, pSpd: 14 };
+let enemies = [], projectiles = [], gems = [], drops = [], eProjectiles = [], augs = [], floatingText = [];
+let activeAbility = null; 
+let wave = 0, frame = 0, paused = false, keys = {}, mouse = {x:0, y:0}, toSpawn = 0, gameStarted = false, curClass = 'speed';
+
+const CLASSES = { speed: { hp: 80, spd: 4.8, dmg: 25, rate: 25 }, tank: { hp: 160, spd: 3, dmg: 25, rate: 25 }, power: { hp: 100, spd: 4, dmg: 38, rate: 30 } };
+
+// Passive Pool (Siphon Removed)
+const AUG_POOL = [
+    { name: "Overclock", type: "rate", desc: "Fire Rate ++" },
+    { name: "Heavy Cal", type: "dmg", desc: "Damage ++" },
+    { name: "Splitter", type: "count", desc: "+1 Projectile" },
+    { name: "Plating", type: "maxhp", desc: "Max HP ++" },
+    { name: "Scope", type: "pspeed", desc: "Bullet Speed" },
+    { name: "Magnet", type: "mag", desc: "Pickup Range" },
+    { name: "Reactor", type: "abSpeed", desc: "Ability Recharge" },
+    { name: "Titanium", type: "armor", desc: "Damage Reduction" },
+    { name: "Vampire", type: "vamp", desc: "High Leech, Low HP" }
+];
+
+// Active Ability Pool (Trade Screen Only)
+const ABILITY_POOL = [
+    { name: "Burst: Nova", abType: "nova", desc: "Space: Clear Area" },
+    { name: "Burst: Shield", abType: "shield", desc: "Space: Invulnerable" },
+    { name: "Burst: Dash", abType: "dash", desc: "Space: Warp to Mouse" }
+];
+
+function getAug(rarity) {
+    let t = AUG_POOL[Math.floor(Math.random()*AUG_POOL.length)];
+    // Make Vampire artificially rare: 80% chance to reroll if you land on it.
+    if(t.type === 'vamp' && Math.random() < 0.8) {
+        t = AUG_POOL[0]; // fallback to overclock
+    }
+    
+    let m = rarity === 'legendary' ? 3.5 : (rarity === 'epic' ? 2.2 : (rarity === 'rare' ? 1.5 : 1));
+    return {
+        name: (rarity.toUpperCase() + " " + t.name), rarity, baseName: t.name,
+        apply: () => {
+            if(t.type === 'spd') player.bSpeed += (0.6*m);
+            if(t.type === 'dmg') weapon.dmg += (14*m);
+            if(t.type === 'rate') weapon.bRate *= (1-(0.15*m));
+            if(t.type === 'count') weapon.count += (rarity === 'legendary' ? 2 : 1);
+            if(t.type === 'maxhp') { player.maxHp += (50*m); player.hp += (50*m); }
+            if(t.type === 'pspeed') weapon.pSpd += (5*m);
+            if(t.type === 'mag') player.mag += (80*m);
+            if(t.type === 'abSpeed') player.abSpeed += (0.5 * m);
+            if(t.type === 'armor') player.armor += (0.2 * m);
+            if(t.type === 'vamp') { player.leech += (4*m); player.maxHp = Math.max(10, player.maxHp - 30); if(player.hp > player.maxHp) player.hp = player.maxHp; }
+            player.speed = player.bSpeed; weapon.rate = weapon.bRate;
+        }
+    };
+}
+
+function selClass(c, el) {
+    curClass = c;
+    document.querySelectorAll('.class-card').forEach(x => x.classList.remove('selected'));
+    el.classList.add('selected');
+}
+
+function init() {
+    canvas.width = window.innerWidth; canvas.height = window.innerHeight;
+    const c = CLASSES[curClass];
+    player.x = canvas.width/2; player.y = canvas.height/2;
+    player.hp = player.maxHp = c.hp; player.speed = player.bSpeed = c.spd;
+    weapon.dmg = weapon.bDmg = c.dmg; weapon.rate = weapon.bRate = c.rate;
+    document.getElementById('main-menu').style.display = 'none';
+    document.getElementById('game-ui').style.display = 'block';
+    gameStarted = true; nextWave(); loop();
+}
+
+window.onkeydown = e => {
+    keys[e.code] = true;
+    if(e.code === 'Escape' || e.code === 'KeyP') togglePause();
+    if(e.code === 'Space') useAbility();
+};
+window.onkeyup = e => keys[e.code] = false;
+window.onmousemove = e => { mouse.x = e.clientX; mouse.y = e.clientY; };
+
+function useAbility() {
+    if(player.abCharge < player.abMax || !activeAbility) return;
+    player.abCharge = 0;
+    
+    if(activeAbility.abType === 'nova') {
+        enemies.forEach(e => {
+            if(Math.hypot(e.x-player.x, e.y-player.y) < 350) {
+                e.hp -= (weapon.dmg * 10);
+                addPop(e.x, e.y, "NOVA", "#ff00ff");
+            }
+        });
+        player.shake = 25;
+    } 
+    else if(activeAbility.abType === 'shield') {
+        player.shielded = 240; 
+    }
+    else if(activeAbility.abType === 'dash') {
+        let ang = Math.atan2(mouse.y - player.y, mouse.x - player.x);
+        player.x += Math.cos(ang) * 350;
+        player.y += Math.sin(ang) * 350;
+        player.x = Math.max(player.r, Math.min(canvas.width - player.r, player.x));
+        player.y = Math.max(player.r, Math.min(canvas.height - player.r, player.y));
+        addPop(player.x, player.y, "WARP", "#aa00ff");
+    }
+}
+
+function togglePause() {
+    if(!gameStarted || player.dead) return;
+    paused = !paused;
+    document.getElementById('pause-menu').style.display = paused ? 'flex' : 'none';
+    if(!paused) loop();
+}
+
+function nextWave() {
+    wave++; 
+    toSpawn = 12 + (wave * 5);
+    document.getElementById('wave-txt').innerText = wave;
+    if (wave >= 3 && Math.random() < 0.25) { spawnEnemy('boss'); } 
+}
+
+function spawnEnemy(typeOverride = null, spawnX = null, spawnY = null) {
+    let x = spawnX, y = spawnY;
+    if (x === null || y === null) {
+        let side = Math.floor(Math.random()*4);
+        if(side==0){x=Math.random()*canvas.width;y=-100}
+        else if(side==1){x=Math.random()*canvas.width;y=canvas.height+100}
+        else if(side==2){x=-100;y=Math.random()*canvas.height}
+        else {x=canvas.width+100;y=Math.random()*canvas.height}
+    }
+    
+    let r = Math.random(), type = typeOverride || 'normal';
+    if (!typeOverride) {
+        if (r < 0.15) type = 'shooter';
+        else if (r < 0.25) type = 'swarmer';
+        else if (r < 0.35 && wave > 3) type = 'splitter';
+        else if (r < 0.45 && wave > 4) type = 'wraith';
+        else if (r < 0.55 && wave > 2) type = 'tank';
+    }
+
+    let h = 40 + (wave * 20), s = 1.6 + (wave * 0.08), rad = 15, col = "#ff4d4d";
+    
+    if (type == 'shooter') { col = "#00f2ff"; s *= 0.8; rad = 18; }
+    else if (type == 'tank') { col = "#900"; h *= 4; s *= 0.5; rad = 30; }
+    else if (type == 'swarmer') { col = "#ffff00"; h *= 0.5; s *= 2.2; rad = 10; }
+    else if (type == 'wraith') { col = "#aa00ff"; h *= 1.5; s *= 1.2; rad = 20; }
+    else if (type == 'splitter') { col = "#ff8800"; h *= 1.8; s *= 0.9; rad = 22; }
+    else if (type == 'boss') { col = "#ff00ff"; h *= 16; s *= 0.6; rad = 60; }
+
+    enemies.push({ x, y, type, hp: h, maxH: h, r: rad, c: col, spd: s, sTimer: 60, dead: false, lastTele: 0, teleStart: null, teleTimer: 0 });
+}
+
+function addPop(x, y, txt, col) {
+    floatingText.push({ x, y, txt, col, life: 60, vy: -2 });
+}
+
+function openTrade() {
+    paused = true;
+    document.getElementById('trade-menu').style.display = "flex";
+    const cont = document.getElementById('trade-container');
+    cont.innerHTML = "";
+    
+    ABILITY_POOL.forEach(a => {
+        let div = document.createElement('div'); 
+        div.className = `aug-card trade-rare`;
+        div.innerHTML = `<h3>${a.name}</h3><p>${a.desc}</p>`;
+        div.onclick = () => { 
+            activeAbility = { ...a, rarity: 'trade-rare', baseName: a.name };
+            updateSlots(); 
+            closeMenu('trade-menu'); 
+        };
+        cont.appendChild(div);
+    });
+}
+
+function openAug(spec = null) {
+    paused = true; 
+    document.getElementById('choice-menu').style.display = "flex";
+    const cont = document.getElementById('aug-container'); 
+    cont.innerHTML = "";
+    document.getElementById('replace-ui').style.display = 'none';
+
+    if (spec) {
+        renderSingleCard(spec);
+    } else {
+        for(let i=0; i<3; i++) {
+            let roll = Math.random(), rar = 'common';
+            if (roll < 0.05) rar = 'legendary'; else if (roll < 0.15) rar = 'epic'; else if (roll < 0.30) rar = 'rare';
+            const a = getAug(rar);
+            renderSingleCard(a, cont);
+        }
+    }
+}
+
+function renderSingleCard(a, cont = document.getElementById('aug-container')) {
+    let div = document.createElement('div'); div.className = `aug-card ${a.rarity}`;
+    div.innerHTML = `<h3>${a.name}</h3><p>${a.desc}</p>`;
+    
+    div.onclick = () => { 
+        let existing = augs.find(x => x.name === a.name);
+        if (existing) {
+            a.apply();
+            existing.stack = (existing.stack || 1) + 1;
+            updateSlots();
+            closeMenu('choice-menu');
+        } else if (augs.length < 5) {
+            a.apply();
+            a.stack = 1;
+            augs.push(a);
+            updateSlots();
+            closeMenu('choice-menu');
+        } else {
+            showReplace(a);
+        }
+    };
+    cont.appendChild(div);
+}
+
+function showReplace(newA) {
+    document.getElementById('replace-ui').style.display = 'block';
+    const rb = document.getElementById('replace-buttons');
+    rb.innerHTML = "";
+    augs.forEach((old, i) => {
+        let b = document.createElement('button');
+        b.className = `rep-btn ${old.rarity}`;
+        b.style.cssText = "margin:5px; padding:10px; cursor:pointer; background:#111; color:#fff; border:1px solid #555;";
+        b.innerText = `OVERWRITE ${old.name} ${old.stack > 1 ? '(x'+old.stack+')' : ''}`;
+        b.onclick = () => { augs.splice(i, 1); newA.apply(); newA.stack = 1; augs.push(newA); updateSlots(); closeMenu('choice-menu'); };
+        rb.appendChild(b);
+    });
+}
+
+function updateSlots() {
+    for(let i=0; i<5; i++) {
+        const t = document.getElementById('t'+i);
+        const s = document.getElementById('s'+i);
+        const b = document.getElementById('b'+i);
+        
+        if(augs[i]) { 
+            t.innerText = augs[i].name; 
+            s.className = `slot active ${augs[i].rarity}`;
+            if(augs[i].stack > 1) {
+                b.style.display = 'block';
+                b.innerText = 'x' + augs[i].stack;
+            } else { b.style.display = 'none'; }
+        } else { 
+            t.innerText = "--"; s.className = "slot"; b.style.display = 'none';
+        }
+    }
+    
+    const tAb = document.getElementById('t-ab');
+    const sAb = document.getElementById('s-ab');
+    if(activeAbility) {
+        tAb.innerText = activeAbility.baseName;
+        sAb.className = `slot active trade-rare`;
+    } else {
+        tAb.innerText = "EMPTY";
+    }
+}
+
+function closeMenu(id) { document.getElementById(id).style.display = "none"; paused = false; loop(); }
+
+function triggerDeath() {
+    player.dead = true; paused = true;
+    document.getElementById('final-wave').innerText = wave;
+    document.getElementById('death-screen').style.display = 'flex';
+}
+
+function loop() {
+    if (paused || !gameStarted || player.dead) return;
+    
+    let sx = (Math.random()-0.5)*player.shake;
+    let sy = (Math.random()-0.5)*player.shake;
+    if(player.shake > 0) player.shake *= 0.9;
+
+    ctx.fillStyle = "#050505"; ctx.fillRect(0,0,canvas.width,canvas.height);
+    ctx.save();
+    ctx.translate(sx, sy);
+
+    if(keys['KeyW']) player.y -= player.speed; if(keys['KeyS']) player.y += player.speed;
+    if(keys['KeyA']) player.x -= player.speed; if(keys['KeyD']) player.x += player.speed;
+    player.x = Math.max(player.r, Math.min(canvas.width - player.r, player.x));
+    player.y = Math.max(player.r, Math.min(canvas.height - player.r, player.y));
+    
+    if(player.shielded > 0) {
+        player.shielded--;
+        ctx.strokeStyle = "#ff00ff"; ctx.lineWidth = 4;
+        ctx.beginPath(); ctx.arc(player.x, player.y, player.r + 8, 0, Math.PI*2); ctx.stroke();
+    }
+    
+    ctx.drawImage(cruzzImg, player.x-25, player.y-25, 50, 50);
+
+    if (toSpawn > 0 && frame % 45 === 0) { spawnEnemy(); toSpawn--; }
+    if (activeAbility && player.abCharge < player.abMax) player.abCharge += player.abSpeed;
+
+    if (frame % Math.floor(weapon.rate) === 0) {
+        let ang = Math.atan2(mouse.y - player.y, mouse.x - player.x);
+        for(let i=0; i<weapon.count; i++) {
+            projectiles.push({x: player.x, y: player.y, vx: Math.cos(ang+(i*0.12-weapon.count*0.06))*weapon.pSpd, vy: Math.sin(ang+(i*0.12-weapon.count*0.06))*weapon.pSpd, alive:true});
+        }
+    }
+
+    projectiles.forEach(p => {
+        p.x += p.vx; p.y += p.vy;
+        ctx.fillStyle = "#00f2ff"; ctx.beginPath(); ctx.arc(p.x, p.y, 4, 0, Math.PI*2); ctx.fill();
+        enemies.forEach(e => {
+            if (p.alive && Math.hypot(e.x-p.x, e.y-p.y) < e.r+5) {
+                e.hp -= weapon.dmg; p.alive = false; 
+                addPop(e.x, e.y, Math.floor(weapon.dmg), "#fff");
+                if(e.hp <= 0 && !e.dead) { 
+                    e.dead = true; 
+                    let gc = e.type === 'tank' ? 6 : (e.type === 'boss' ? 15 : (e.type === 'wraith' ? 4 : 1));
+                    for(let i=0; i<gc; i++) gems.push({x: e.x+Math.random()*40-20, y: e.y+Math.random()*40-20, val: 25});
+                    
+                    if(e.type === 'splitter') {
+                        spawnEnemy('swarmer', e.x + 15, e.y);
+                        spawnEnemy('swarmer', e.x - 15, e.y);
+                    }
+
+                    if(e.type === 'boss') {
+                        drops.push({x: e.x, y: e.y, data: { rarity: 'trade-rare', type: 'core' }}); // Drops the red core
+                    } else if(e.type === 'shooter' && Math.random() < 0.1) {
+                        drops.push({x: e.x, y: e.y, data: getAug('rare')});
+                    } else if((e.type === 'tank') && Math.random() < 0.2) {
+                        drops.push({x: e.x, y: e.y, data: getAug(Math.random() < 0.2 ? 'legendary' : 'epic')});
+                    }
+                    
+                    if(player.leech > 0) player.hp = Math.min(player.maxHp, player.hp + player.leech);
+                }
+            }
+        });
+        if(p.x < 0 || p.x > canvas.width || p.y < 0 || p.y > canvas.height) p.alive = false;
+    });
+
+    eProjectiles.forEach(ep => {
+        ep.x += ep.vx; ep.y += ep.vy;
+        ctx.fillStyle = "#ff0000"; ctx.beginPath(); ctx.arc(ep.x, ep.y, 7, 0, Math.PI*2); ctx.fill();
+        if(Math.hypot(player.x - ep.x, player.y - ep.y) < player.r && player.shielded <= 0) {
+            let dmg = Math.max(2, 15 - (player.armor * 10)); 
+            player.hp -= dmg; ep.alive = false; player.shake = 10;
+        }
+        if(ep.x < 0 || ep.x > canvas.width || ep.y < 0 || ep.y > canvas.height) ep.alive = false;
+    });
+
+    // Enemy AI & Anti-Stacking
+    enemies.forEach((e, index) => {
+        // Teleportation Logic
+        if(e.teleTimer > 0 && e.teleStart) {
+            ctx.strokeStyle = `rgba(170, 0, 255, ${e.teleTimer/20})`;
+            ctx.lineWidth = 4;
+            ctx.beginPath(); ctx.moveTo(e.teleStart.x, e.teleStart.y); ctx.lineTo(e.x, e.y); ctx.stroke();
+            e.teleTimer--;
+        }
+
+        let d = Math.hypot(player.x-e.x, player.y-e.y);
+        
+        if(e.type === 'wraith' && frame - e.lastTele > 180 && d < 400 && d > 100) {
+            e.teleStart = {x: e.x, y: e.y};
+            e.x = player.x + (Math.random()-0.5)*150; 
+            e.y = player.y + (Math.random()-0.5)*150;
+            e.lastTele = frame; e.teleTimer = 20; 
+        }
+
+        let vx = 0, vy = 0;
+        if((e.type === 'shooter' && d < 350) || (e.type === 'boss' && d < 450)) {
+            e.sTimer--;
+            if(e.sTimer <= 0) {
+                let ang = Math.atan2(player.y - e.y, player.x - e.x);
+                if(e.type === 'boss') {
+                    for(let i=-2; i<=2; i++) eProjectiles.push({x: e.x, y: e.y, vx: Math.cos(ang+i*0.25)*8, vy: Math.sin(ang+i*0.25)*8, alive: true});
+                    e.sTimer = 70;
+                } else {
+                    eProjectiles.push({x: e.x, y: e.y, vx: Math.cos(ang)*7, vy: Math.sin(ang)*7, alive: true});
+                    e.sTimer = 90;
+                }
+            }
+            if(d < 250) { vx = -((player.x-e.x)/d)*e.spd; vy = -((player.y-e.y)/d)*e.spd; }
+        } else {
+            vx = ((player.x-e.x)/d)*e.spd; vy = ((player.y-e.y)/d)*e.spd;
+        }
+
+        // Anti-Stacking Separation Steering
+        let sepX = 0, sepY = 0;
+        enemies.forEach(e2 => {
+            if(e !== e2) {
+                let dist = Math.hypot(e.x - e2.x, e.y - e2.y);
+                if(dist > 0 && dist < e.r + e2.r) {
+                    sepX += (e.x - e2.x) * 0.05;
+                    sepY += (e.y - e2.y) * 0.05;
+                }
+            }
+        });
+
+        e.x += (vx + sepX); e.y += (vy + sepY);
+        
+        ctx.fillStyle = e.c; ctx.beginPath(); ctx.arc(e.x, e.y, e.r, 0, Math.PI*2); ctx.fill();
+        let barW = e.type === 'boss' ? 60 : 30;
+        ctx.fillStyle = "#222"; ctx.fillRect(e.x - barW/2, e.y - (e.r + 15), barW, 5);
+        ctx.fillStyle = "#0f0"; ctx.fillRect(e.x - barW/2, e.y - (e.r + 15), (e.hp/e.maxH) * barW, 5);
+        
+        if (d < e.r+15 && player.shielded <= 0) { 
+            let touchDmg = Math.max(0.1, 0.8 - player.armor);
+            player.hp -= touchDmg; player.shake = 2; 
+        }
+    });
+
+    gems.forEach(g => {
+        let d = Math.hypot(player.x-g.x, player.y-g.y);
+        if (d < player.mag) { g.x += (player.x-g.x)*0.15; g.y += (player.y-g.y)*0.15; }
+        if (d < 25) {
+            player.xp += g.val; g.collected = true;
+            if (player.xp >= player.nextXp) {
+                player.lvl++; player.xp = 0; player.nextXp *= 1.25;
+                if (player.lvl % 4 === 0) openAug();
+            }
+        }
+        ctx.fillStyle = "#ff00ff"; ctx.fillRect(g.x, g.y, 8, 8);
+    });
+
+    floatingText.forEach(f => {
+        f.y += f.vy; f.life--;
+        ctx.fillStyle = f.col; ctx.globalAlpha = f.life/60;
+        ctx.font = "bold 16px monospace"; ctx.fillText(f.txt, f.x, f.y);
+        ctx.globalAlpha = 1;
+    });
+
+    drops.forEach(d => {
+        let dist = Math.hypot(player.x-d.x, player.y-d.y);
+        ctx.fillStyle = d.data.type === 'core' ? '#ff0055' : (d.data.rarity === 'legendary' ? '#ffcc00' : '#aa00ff');
+        ctx.beginPath(); ctx.arc(d.x, d.y, 12, 0, Math.PI*2); ctx.fill();
+        
+        // Add a pulsing effect to the Core
+        if(d.data.type === 'core') {
+            ctx.strokeStyle = `rgba(255, 0, 85, ${0.5 + Math.sin(frame*0.1)*0.5})`;
+            ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(d.x, d.y, 18, 0, Math.PI*2); ctx.stroke();
+        }
+
+        if (dist < 35) { 
+            d.collected = true; 
+            if(d.data.type === 'core') openTrade();
+            else openAug(d.data); 
+        }
+    });
+
+    ctx.restore();
+
+    enemies = enemies.filter(e => !e.dead); 
+    gems = gems.filter(g => !g.collected); 
+    drops = drops.filter(d => !d.collected); 
+    projectiles = projectiles.filter(p => p.alive);
+    eProjectiles = eProjectiles.filter(ep => ep.alive);
+    floatingText = floatingText.filter(f => f.life > 0);
+
+    if(toSpawn <= 0 && enemies.length === 0) nextWave();
+
+    document.getElementById('hp-fill-v').style.height = (player.hp/player.maxHp*100) + "%";
+    document.getElementById('xp-fill').style.width = (player.xp/player.nextXp*100) + "%";
+    document.getElementById('lvl-txt').innerText = player.lvl;
+    document.getElementById('ability-fill').style.width = Math.min(100, (player.abCharge/player.abMax)*100) + "%";
+    document.getElementById('ability-txt').style.visibility = (player.abCharge >= player.abMax && activeAbility) ? 'visible' : 'hidden';
+
+    if (player.hp <= 0) triggerDeath();
+    frame++; requestAnimationFrame(loop);
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,699 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Balloon Defender</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
+    <style>
+        body { 
+            margin: 0; 
+            overflow: hidden; 
+            font-family: 'Courier New', monospace; 
+            background-color: #020617;
+            background-image: radial-gradient(circle, #ffffff22 2px, transparent 2px);
+            background-size: 60px 60px;
+            animation: scrollUp 1.5s linear infinite;
+            transition: background-color 2s ease-in-out;
+            cursor: none; 
+        }
+        @keyframes scrollUp {
+            from { background-position: 0 0; }
+            to { background-position: 0 60px; }
+        }
+        body.hyper-scroll { animation: scrollUp 0.15s linear infinite; }
+        canvas { background: transparent !important; }
+        
+        /* UI Elements */
+        #ui { position: absolute; top: 20px; width: 100%; text-align: center; color: #38bdf8; pointer-events: none; z-index: 10; }
+        #levelDisplay { font-size: 22px; font-weight: bold; letter-spacing: 2px; text-shadow: 0px 0px 5px black; transition: color 0.5s; }
+        #scoreDisplay { font-size: 40px; font-weight: 900; text-shadow: 0px 0px 5px black; }
+        #gemDisplay { font-size: 24px; font-weight: bold; color: #d8b4fe; text-shadow: 0px 0px 10px #a855f7; margin-top: 5px; }
+        
+        #comboDisplay {
+            font-size: 30px; font-weight: 900; color: #facc15; 
+            text-shadow: 0px 0px 10px #ca8a04; opacity: 0; 
+            transition: opacity 0.3s ease-out, transform 0.1s ease-out; margin-top: 10px;
+        }
+        #controlsUI { position: absolute; bottom: 15px; left: 15px; color: #64748b; font-size: 14px; font-weight: bold; pointer-events: none; z-index: 10; }
+        #abilitiesUI { position: absolute; bottom: 15px; right: 15px; text-align: right; font-size: 16px; font-weight: bold; pointer-events: none; z-index: 10; display: flex; flex-direction: column; gap: 8px; }
+        
+        .ability { padding: 6px 12px; background: rgba(15, 23, 42, 0.85); border: 1px solid #475569; border-radius: 4px; transition: all 0.2s; }
+        .ability.affordable { color: #d8b4fe; border-color: #a855f7; text-shadow: 0 0 8px #a855f7; }
+        .ability.affordable-pts { color: #38bdf8; border-color: #38bdf8; text-shadow: 0 0 8px #38bdf8; }
+        .ability.unaffordable { color: #ef4444; border-color: #ef4444; opacity: 0.6; }
+        .ability.active { color: #facc15; border-color: #facc15; text-shadow: 0 0 15px #facc15; background: rgba(250, 204, 21, 0.25); }
+        
+        /* Transition Animation Overlays */
+        #transitionUI { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; pointer-events: none; z-index: 50; display: none; width: 100%; text-shadow: 0 0 20px black; }
+        .anim-pop { animation: popIn 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; }
+        .anim-fade { animation: fadeOut 0.5s ease-in forwards; }
+        
+        @keyframes popIn { 0% { opacity: 0; transform: scale(0.2) translateY(50px); } 100% { opacity: 1; transform: scale(1) translateY(0); } }
+        @keyframes fadeOut { 0% { opacity: 1; transform: scale(1); } 100% { opacity: 0; transform: scale(1.2); } }
+
+        /* Standard Overlays */
+        #pauseUI { display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 60px; font-weight: 900; color: #38bdf8; text-shadow: 0 0 20px #0284c7; z-index: 15; pointer-events: none; }
+        
+        .modal {
+            display: none; position: absolute; top: 50%; left: 50%;
+            transform: translate(-50%, -50%); background: rgba(30, 41, 59, 0.95);
+            padding: 40px; border-radius: 8px; text-align: center; z-index: 20;
+            color: white; border: 2px solid #38bdf8; box-shadow: 0 0 30px #38bdf8;
+            cursor: default; min-width: 350px; backdrop-filter: blur(5px);
+        }
+        #gameOver { border-color: #ef4444; box-shadow: 0 0 30px #ef4444; }
+        
+        input[type="text"] { background: #0f172a; color: #38bdf8; border: 1px solid #38bdf8; padding: 10px; font-size: 24px; width: 100px; text-align: center; font-family: 'Courier New', monospace; text-transform: uppercase; margin: 15px 0; outline: none; }
+        button { padding: 10px 25px; background: #38bdf8; color: #0f172a; border: none; cursor: pointer; font-weight: bold; font-family: 'Courier New', monospace; margin-top: 10px; font-size: 16px; border-radius: 4px; transition: background 0.2s, transform 0.1s; }
+        button:hover { background: #7dd3fc; transform: scale(1.05); }
+        button.danger { background: #ef4444; color: white; }
+        button.danger:hover { background: #dc2626; }
+        button.currency-toggle { background: #8b5cf6; color: white; width: 100%; margin-bottom: 15px; }
+        button.currency-toggle:hover { background: #a855f7; }
+        
+        .score-row { display: flex; justify-content: space-between; font-size: 18px; margin: 5px 0; border-bottom: 1px dashed #475569; padding-bottom: 5px; }
+        .score-row span:nth-child(1) { color: #facc15; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+    <div id="transitionUI">
+        <h1 id="transitionTitle" style="color: #38bdf8; font-size: 70px; margin: 0; text-transform: uppercase;"></h1>
+        <h2 id="transitionNext" style="font-size: 35px; margin: 0; margin-top: 10px; text-transform: uppercase; opacity: 0;"></h2>
+    </div>
+
+    <div id="ui">
+        <div id="levelDisplay">INITIALIZING...</div>
+        <div id="scoreDisplay">0</div>
+        <div id="gemDisplay">💎 0</div>
+        <div id="timeDisplay" style="font-size: 14px; color: #cbd5e1; margin-top: 5px; text-shadow: 0px 0px 5px black;"></div>
+        <div id="comboDisplay"></div>
+        <div id="threatDisplay" style="font-size: 12px; color: #ef4444; margin-top: 5px; font-weight: bold;"></div>
+    </div>
+
+    <div id="controlsUI">[P] PAUSE | [TAB] LEADERBOARD / ECONOMY</div>
+    
+    <div id="abilitiesUI">
+        <div id="ab1" class="ability unaffordable">[1] REPULSE</div>
+        <div id="ab2" class="ability unaffordable">[2] EMP DETONATION</div>
+        <div id="ab3" class="ability unaffordable">[3] AEGIS CORE</div>
+        <div id="ab4" class="ability unaffordable">[4] AUTO-TURRET</div>
+    </div>
+
+    <div id="pauseUI">PAUSED</div>
+
+    <div id="liveLeaderboard" class="modal">
+        <button id="toggleEconBtnLB" class="currency-toggle" onclick="toggleEconomyMode()">PAYING WITH: GEMS</button>
+        <h3 style="color: #38bdf8; margin-top: 0;">TOP PILOTS</h3>
+        <div id="liveLeaderboardList"></div>
+        <p style="color: #94a3b8; font-size: 14px; margin-bottom: 0; margin-top: 20px;">[PRESS TAB TO RESUME]</p>
+    </div>
+
+    <div id="gameOver" class="modal">
+        <h1 style="color:#ef4444; margin-top:0;">HULL BREACH</h1>
+        <p id="finalScore" style="font-size: 24px; font-weight: bold; margin-bottom: 10px;"></p>
+        <button id="toggleEconBtnGO" class="currency-toggle" onclick="toggleEconomyMode()">PAYING WITH: GEMS</button>
+        <div id="nameEntryUI">
+            <p style="color: #94a3b8; margin-bottom: 0;">ENTER INITIALS:</p>
+            <input type="text" id="playerName" maxlength="3" autocomplete="off" autofocus>
+            <br>
+            <button onclick="submitScore()">SAVE SCORE</button>
+        </div>
+        <div id="leaderboardDisplay" style="display: none; margin-top: 20px; text-align: left;">
+            <h3 style="color: #38bdf8; text-align: center; margin-top: 0;">TOP PILOTS</h3>
+            <div id="leaderboardList"></div>
+            <div style="text-align: center; margin-top: 20px;">
+                <button class="danger" onclick="location.reload()">REBOOT SYSTEM</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ==========================================================
+        // DATA & ECONOMY
+        // ==========================================================
+        const DB_KEY = 'balloon_defender_abilities_lb';
+        const GEMS_KEY = 'balloon_defender_gems';
+        const ABILITY_USAGE_KEY = 'balloon_defender_ability_uses';
+        const ECON_MODE_KEY = 'balloon_defender_econ_mode';
+        const BANNED_WORDS = ["ASS", "FUK", "FUC", "SHI", "CUN", "DIC", "DIK", "COK", "SEX", "TIT", "PIS", "NIG", "FAG", "WTF", "KKK", "SLU", "HOE", "VAG", "PEN", "CUM", "JIZ", "GAY", "KYS", "JEW", "FAP"];
+
+        let gems = parseInt(localStorage.getItem(GEMS_KEY) || '0');
+        let economyMode = localStorage.getItem(ECON_MODE_KEY) || 'gems'; 
+        document.getElementById('gemDisplay').innerText = `💎 ${gems}`;
+
+        const BASE_GEM_COSTS = { 1: 1, 2: 2, 3: 3, 4: 2 };
+        const BASE_POINT_COSTS = { 1: 300, 2: 750, 3: 1500, 4: 1000 };
+        const POINT_COST_SCALING_PER_USE = { 1: 100, 2: 250, 3: 500, 4: 300 }; 
+        let abilityUses = JSON.parse(localStorage.getItem(ABILITY_USAGE_KEY) || '{"1":0, "2":0, "3":0, "4":0}');
+
+        function getGemCost(id) { return BASE_GEM_COSTS[id] + abilityUses[id]; }
+        function getPointCost(id) {
+            let baseCost = BASE_POINT_COSTS[id] + (abilityUses[id] * POINT_COST_SCALING_PER_USE[id]);
+            return Math.floor(baseCost * (1 + (score / 4000)));
+        }
+
+        function toggleEconomyMode() {
+        economyMode = economyMode === 'gems' ? 'points' : 'gems';
+        if (storageActive) {
+        localStorage.setItem(ECON_MODE_KEY, economyMode);
+         }
+        updateEconomyButtons(); 
+        updateAbilityUI();
+}
+
+        function updateEconomyButtons() {
+            const text = `PAYING WITH: ${economyMode === 'gems' ? 'GEMS 💎' : 'POINTS ⭐'}`;
+            document.getElementById('toggleEconBtnLB').innerText = text;
+            document.getElementById('toggleEconBtnGO').innerText = text;
+        }
+        updateEconomyButtons();
+
+        function saveEconomy() {
+            localStorage.setItem(GEMS_KEY, gems.toString());
+            localStorage.setItem(ABILITY_USAGE_KEY, JSON.stringify(abilityUses));
+            document.getElementById('gemDisplay').innerText = `💎 ${gems}`; updateAbilityUI();
+        }
+
+        async function fetchScores() {
+            const data = localStorage.getItem(DB_KEY);
+            return data ? JSON.parse(data) : [{ name: "CPU", score: 6000 }, { name: "HAL", score: 3500 }, { name: "BOT", score: 1200 }];
+        }
+
+        async function saveToDatabase(name, score) {
+            let scores = await fetchScores(); scores.push({ name: name, score: score });
+            scores.sort((a, b) => b.score - a.score); scores = scores.slice(0, 5); 
+            localStorage.setItem(DB_KEY, JSON.stringify(scores)); return scores;
+        }
+
+        async function submitScore() {
+            let nameInput = document.getElementById('playerName').value.toUpperCase();
+            if (!nameInput || nameInput.trim() === "") nameInput = "???";
+            if (BANNED_WORDS.includes(nameInput)) nameInput = "CEN"; 
+
+            document.getElementById('nameEntryUI').style.display = 'none';
+            document.getElementById('toggleEconBtnGO').style.display = 'none'; 
+            const updatedScores = await saveToDatabase(nameInput, score);
+            
+            const listDiv = document.getElementById('leaderboardList');
+            listDiv.innerHTML = '';
+            updatedScores.forEach((entry, index) => { listDiv.innerHTML += `<div class="score-row"><span>#${index + 1} ${entry.name}</span><span>${entry.score}</span></div>`; });
+            document.getElementById('leaderboardDisplay').style.display = 'block';
+        }
+
+        // ==========================================================
+        // MATTER.JS ENGINE SETUP
+        // ==========================================================
+        const { Engine, Render, Bodies, Composite, Constraint, Events, Body } = Matter;
+        const engine = Engine.create({ gravity: { y: 0, x: 0 } });
+        const render = Render.create({
+            element: document.body, engine: engine,
+            options: { width: window.innerWidth, height: window.innerHeight, wireframes: false, background: 'transparent' }
+        });
+
+        const noCollideGroup = Body.nextGroup(true); 
+        const defaultCategory = 0x0001; const shieldCategory = 0x0002;
+        
+        let BASE_ENEMY_LIMIT = 5; let dynamicEnemyLimit = BASE_ENEMY_LIMIT; let threatLevel = 0;
+        const balloonCx = window.innerWidth / 2; const balloonCy = window.innerHeight / 2; 
+
+        const balloon = Bodies.circle(balloonCx, balloonCy, 25, {
+            label: 'balloon', density: 0.0005, collisionFilter: { category: defaultCategory, group: noCollideGroup },
+            render: { sprite: { texture: 'https://core-docs.s3.amazonaws.com/oregon_city_school_district_62_ar/directory/205899160/small_a5fa43fe-97da-4562-9943-37f20b4870c8.png', xScale: 0.5, yScale: 0.5 } }
+        });
+
+        const anchor = Constraint.create({ pointA: { x: balloonCx, y: balloonCy }, bodyB: balloon, stiffness: 0.05, render: { visible: false } });
+        const shield = Bodies.circle(balloonCx, balloonCy + 80, 18, {
+            label: 'shield', inertia: Infinity, collisionFilter: { category: shieldCategory, mask: 0xFFFF, group: noCollideGroup }, 
+            render: { fillStyle: '#38bdf8', strokeStyle: '#fff', lineWidth: 3 }
+        });
+
+        const aegisAura = Bodies.circle(balloonCx, balloonCy, 40, { label: 'aegis', isSensor: true, isStatic: true, render: { fillStyle: 'transparent', strokeStyle: '#facc15', lineWidth: 4, visible: false } });
+
+        Composite.add(engine.world, [balloon, anchor, shield, aegisAura]);
+
+        let targetMouseX = balloonCx, targetMouseY = balloonCy + 80;
+        let lastMouseX = targetMouseX, lastMouseY = targetMouseY; let shieldVx = 0, shieldVy = 0;
+
+        window.addEventListener('mousemove', (event) => { targetMouseX = event.clientX; targetMouseY = event.clientY; });
+
+        // ==========================================================
+        // ABILITY SYSTEM LOGIC
+        // ==========================================================
+        let isAegisActive = false; let isTurretActive = false; let turretFrames = 0;
+
+        function updateAbilityUI() {
+            const ab1 = document.getElementById('ab1'), ab2 = document.getElementById('ab2'), ab3 = document.getElementById('ab3'), ab4 = document.getElementById('ab4');
+            const useGems = economyMode === 'gems'; const affordClass = useGems ? 'affordable' : 'affordable-pts';
+
+            const c1 = useGems ? getGemCost(1) : getPointCost(1), c2 = useGems ? getGemCost(2) : getPointCost(2);
+            const c3 = useGems ? getGemCost(3) : getPointCost(3), c4 = useGems ? getGemCost(4) : getPointCost(4);
+            const a1 = useGems ? gems >= c1 : score >= c1, a2 = useGems ? gems >= c2 : score >= c2;
+            const a3 = useGems ? gems >= c3 : score >= c3, a4 = useGems ? gems >= c4 : score >= c4;
+            const cur = useGems ? '💎' : 'PTS';
+
+            ab1.innerText = `[1] REPULSE - ${c1} ${cur}`; ab1.className = `ability ${a1 ? affordClass : 'unaffordable'}`;
+            ab2.innerText = `[2] EMP - ${c2} ${cur}`; ab2.className = `ability ${a2 ? affordClass : 'unaffordable'}`;
+            
+            if (isAegisActive) { ab3.className = 'ability active'; ab3.innerText = '[3] AEGIS ACTIVE'; } 
+            else { ab3.innerText = `[3] AEGIS CORE - ${c3} ${cur}`; ab3.className = `ability ${a3 ? affordClass : 'unaffordable'}`; }
+
+            if (isTurretActive) { ab4.className = 'ability active'; ab4.innerText = '[4] TURRET ACTIVE'; } 
+            else { ab4.innerText = `[4] AUTO-TURRET - ${c4} ${cur}`; ab4.className = `ability ${a4 ? affordClass : 'unaffordable'}`; }
+        }
+
+        function triggerAbility(type) {
+            if (isGameOver || isPaused || isViewingLeaderboard || isTransitioning) return;
+            const useGems = economyMode === 'gems'; const cost = useGems ? getGemCost(type) : getPointCost(type);
+            if (useGems && gems < cost) return; if (!useGems && score < cost) return;
+
+            if (type === 1) {
+                activeObstacles.forEach(body => {
+                    const angle = Math.atan2(body.position.y - balloon.position.y, body.position.x - balloon.position.x);
+                    Body.setVelocity(body, { x: Math.cos(angle) * 30, y: Math.sin(angle) * 30 }); Body.setStatic(body, false); body.plugin.dead = true; 
+                }); activeObstacles = []; 
+            } 
+            else if (type === 2) { [...activeObstacles].forEach(body => killEnemy(body, false)); activeObstacles = []; }
+            else if (type === 3 && !isAegisActive) {
+                isAegisActive = true; aegisAura.render.visible = true;
+                setTimeout(() => { isAegisActive = false; aegisAura.render.visible = false; updateAbilityUI(); }, 8000);
+            }
+            else if (type === 4 && !isTurretActive) { isTurretActive = true; turretFrames = 0; } else return; 
+
+            if (useGems) gems -= cost; else score -= cost;
+            abilityUses[type]++; document.getElementById('scoreDisplay').innerText = score;
+            saveEconomy(); updateThreatLevel(); 
+        }
+
+        function fireTurretBullet() {
+            if (activeObstacles.length === 0) return;
+            let closest = null, minDist = Infinity;
+            activeObstacles.forEach(obs => {
+                if (obs.plugin.dead) return;
+                let d = Math.pow(obs.position.x - balloon.position.x, 2) + Math.pow(obs.position.y - balloon.position.y, 2);
+                if (d < minDist) { minDist = d; closest = obs; }
+            });
+            if (closest) {
+                let angle = Math.atan2(closest.position.y - balloon.position.y, closest.position.x - balloon.position.x);
+                let bullet = Bodies.circle(balloon.position.x, balloon.position.y, 6, {
+                    label: 'bullet', isSensor: true, collisionFilter: { group: noCollideGroup }, render: { fillStyle: '#fbbf24', strokeStyle: '#fff', lineWidth: 2 }
+                });
+                Body.setVelocity(bullet, { x: Math.cos(angle)*18, y: Math.sin(angle)*18 }); Composite.add(engine.world, bullet);
+                setTimeout(() => { if (bullet.parent) Composite.remove(engine.world, bullet); }, 1500);
+            }
+        }
+
+        let isPaused = false, isViewingLeaderboard = false;
+
+        window.addEventListener('keydown', async (e) => {
+            if (e.repeat) return; 
+            if (['1','2','3','4'].includes(e.key)) triggerAbility(parseInt(e.key));
+            if (e.key.toLowerCase() === 'p') {
+                if (isGameOver || isViewingLeaderboard || isTransitioning) return;
+                isPaused = !isPaused; document.getElementById('pauseUI').style.display = isPaused ? 'block' : 'none'; document.body.style.cursor = isPaused ? 'default' : 'none';
+            }
+            if (e.key === 'Tab') {
+                e.preventDefault(); if (isGameOver || isTransitioning) return; 
+                isViewingLeaderboard = !isViewingLeaderboard; const llb = document.getElementById('liveLeaderboard');
+                if (isViewingLeaderboard) {
+                    isPaused = false; document.getElementById('pauseUI').style.display = 'none'; document.body.style.cursor = 'default'; updateEconomyButtons(); 
+                    const scores = await fetchScores(); const listDiv = document.getElementById('liveLeaderboardList'); listDiv.innerHTML = '';
+                    scores.forEach((entry, index) => { listDiv.innerHTML += `<div class="score-row"><span>#${index + 1} ${entry.name}</span><span>${entry.score}</span></div>`; });
+                    llb.style.display = 'block';
+                } else { document.body.style.cursor = 'none'; llb.style.display = 'none'; }
+            }
+        });
+
+        // ==========================================================
+        // LEVEL ANIMATION HELPERS
+        // ==========================================================
+        function spawnWarpParticles(count, createFunc) {
+            for(let i=0; i<count; i++) { let p = createFunc(); if(p) Composite.add(engine.world, p); }
+        }
+
+        // ==========================================================
+        // DYNAMIC LEVEL DEFINITIONS (NO REPEATS, ANIMATED)
+        // ==========================================================
+        const levelDefinitions = [
+            {
+                title: "UPPER ATMOSPHERE", tier: 'easy', bgColor: '#0f172a', durationFrames: 1800, baseSpawnInterval: 45,
+                onTransitionStart: () => spawnWarpParticles(20, () => {
+                    let p = Bodies.circle(Math.random()*innerWidth, -100 - Math.random()*200, 15, { label: 'fx', isSensor: true, render: { fillStyle: '#ffffff', opacity: 0.3 } });
+                    Body.setVelocity(p, { x: 0, y: 15 + Math.random()*10 }); return p;
+                }),
+                spawnFunc: () => {
+                    const angle = Math.random() * Math.PI * 2; const dist = Math.max(window.innerWidth, window.innerHeight) / 2 + 50;
+                    return [Bodies.circle(balloonCx + Math.cos(angle)*dist, balloonCy + Math.sin(angle)*dist, 12 + Math.random()*18, { plugin: { homing: true, baseSpeed: 1.8 + Math.random()*1.2 }, render: {fillStyle: '#f97316'} })]; 
+                }
+            },
+            {
+                title: "CROSSFIRE", tier: 'easy', bgColor: '#14532d', durationFrames: 1800, baseSpawnInterval: 45,
+                onTransitionStart: () => spawnWarpParticles(15, () => {
+                    let p = Bodies.rectangle(Math.random() > 0.5 ? -100 : innerWidth+100, Math.random()*innerHeight, 40, 4, { label: 'fx', isSensor: true, render: { fillStyle: '#a3e635' } });
+                    Body.setVelocity(p, { x: p.position.x < 0 ? 25 : -25, y: 0 }); return p;
+                }),
+                spawnFunc: () => {
+                    const fromLeft = Math.random() > 0.5; const dist = window.innerWidth / 2 + 50;
+                    return [Bodies.rectangle(fromLeft ? balloonCx - dist : balloonCx + dist, Math.random() * window.innerHeight, 30, 10, { isStatic: true, plugin: { creeper: true, baseSpeed: 3.5 }, render: {fillStyle: '#a3e635'} })]; 
+                }
+            },
+            {
+                title: "OMNI-STORM", tier: 'easy', bgColor: '#2e1065', durationFrames: 2400, baseSpawnInterval: 35,
+                onTransitionStart: () => spawnWarpParticles(25, () => {
+                    let p = Bodies.polygon(balloonCx, balloonCy, 3, 10 + Math.random()*15, { label: 'fx', isSensor: true, render: { fillStyle: '#ef4444', opacity: 0.5 } });
+                    let a = Math.random() * Math.PI * 2; Body.setVelocity(p, { x: Math.cos(a)*15, y: Math.sin(a)*15 }); return p;
+                }),
+                spawnFunc: () => {
+                    const theta = Math.random() * Math.PI * 2; const dist = Math.max(window.innerWidth, window.innerHeight) / 2 + 50;
+                    return [Bodies.polygon(balloonCx + Math.cos(theta)*dist, balloonCy + Math.sin(theta)*dist, 3, 25, { isStatic: true, plugin: { creeper: true, baseSpeed: 1.6 }, render: {fillStyle: '#ef4444'} })]; 
+                }
+            },
+            {
+                title: "ERRATIC SWARM", tier: 'medium', bgColor: '#1e3a8a', durationFrames: 2400, baseSpawnInterval: 80, // NEW ZIG-ZAG LEVEL (Low Spawns)
+                onTransitionStart: () => spawnWarpParticles(15, () => {
+                    let p = Bodies.rectangle(Math.random()*innerWidth, -50, 6, 20, { label: 'fx', isSensor: true, plugin: { fxZigZag: true }, render: { fillStyle: '#60a5fa' } });
+                    Body.setVelocity(p, { x: 0, y: 12 }); return p;
+                }),
+                spawnFunc: () => {
+                    const angle = Math.random() * Math.PI * 2; const dist = Math.max(window.innerWidth, window.innerHeight) / 2 + 50;
+                    return [Bodies.polygon(balloonCx + Math.cos(angle)*dist, balloonCy + Math.sin(angle)*dist, 4, 16, { plugin: { homing: true, zigzag: true, baseSpeed: 2.2 }, render: {fillStyle: '#3b82f6'} })]; 
+                }
+            },
+            {
+                title: "METEOR DRIFT", tier: 'medium', bgColor: '#78350f', durationFrames: 2400, baseSpawnInterval: 40,
+                onTransitionStart: () => spawnWarpParticles(12, () => {
+                    let p = Bodies.polygon(Math.random()*innerWidth, -100, 6, 30, { label: 'fx', isSensor: true, render: { fillStyle: '#fdba74', opacity: 0.6 } });
+                    Body.setVelocity(p, { x: 0, y: 20 }); Body.setAngularVelocity(p, 0.2); return p;
+                }),
+                spawnFunc: () => {
+                    return [Bodies.polygon(Math.random() * window.innerWidth, balloonCy - (window.innerHeight/2 + 100), 6, 40, { isStatic: true, plugin: { creeper: true, baseSpeed: 2.0 }, render: {fillStyle: '#fdba74'} })]; 
+                }
+            },
+            {
+                title: "ORBITAL DEBRIS", tier: 'medium', bgColor: '#0f766e', durationFrames: 2400, baseSpawnInterval: 45,
+                onTransitionStart: () => spawnWarpParticles(30, () => {
+                    let p = Bodies.rectangle(balloonCx, balloonCy, 10, 10, { label: 'fx', isSensor: true, render: { fillStyle: '#5eead4' } });
+                    let a = Math.random() * Math.PI * 2; Body.setVelocity(p, { x: Math.cos(a)*10, y: Math.sin(a)*10 }); return p;
+                }),
+                spawnFunc: () => {
+                    const angle = Math.random() * Math.PI * 2; const dist = Math.max(window.innerWidth, window.innerHeight) / 2 + 50;
+                    return [Bodies.rectangle(balloonCx+Math.cos(angle)*dist, balloonCy+Math.sin(angle)*dist, 20, 20, { plugin: { homing: true, baseSpeed: 1.3 }, render: {fillStyle: '#5eead4'} }),
+                            Bodies.rectangle(balloonCx+Math.cos(angle)*dist+40, balloonCy+Math.sin(angle)*dist+40, 20, 20, { plugin: { homing: true, baseSpeed: 1.3 }, render: {fillStyle: '#5eead4'} })]; 
+                }
+            },
+            {
+                title: "THE ANOMALY", tier: 'hard', bgColor: '#3b0764', durationFrames: 1200, baseSpawnInterval: 40,
+                customSpeedCurve: (progress) => { return 0.8 + 1.2 * (1 - progress); }, 
+                onTransitionStart: () => spawnWarpParticles(20, () => {
+                    let p = Bodies.polygon(Math.random()*innerWidth, Math.random()*innerHeight, 3, 20, { label: 'fx', isSensor: true, render: { fillStyle: '#eab308' } });
+                    Body.setAngularVelocity(p, 0.5); setTimeout(() => { if(p.parent) Composite.remove(engine.world, p); }, 1000); return p; // Glitch out
+                }),
+                spawnFunc: () => {
+                    const angle = Math.random() * Math.PI * 2; const dist = Math.max(window.innerWidth, window.innerHeight) / 2 + 50;
+                    return [Bodies.polygon(balloonCx + Math.cos(angle)*dist, balloonCy + Math.sin(angle)*dist, 3, 15, { plugin: { homing: true, baseSpeed: 1.4 }, render: {fillStyle: '#eab308'} })];
+                }
+            },
+            {
+                title: "NEON PULSE", tier: 'hard', bgColor: '#172554', durationFrames: 1800, baseSpawnInterval: 30,
+                onTransitionStart: () => spawnWarpParticles(15, () => {
+                    let p = Bodies.circle(balloonCx, balloonCy, 10, { label: 'fx', isSensor: true, render: { fillStyle: 'transparent', strokeStyle: '#22d3ee', lineWidth: 4 } });
+                    let a = Math.random() * Math.PI * 2; Body.setVelocity(p, { x: Math.cos(a)*25, y: Math.sin(a)*25 }); return p;
+                }),
+                spawnFunc: () => {
+                    const angle = Math.random() * Math.PI * 2; const dist = Math.max(window.innerWidth, window.innerHeight) / 2 + 50;
+                    return [Bodies.circle(balloonCx + Math.cos(angle)*dist, balloonCy + Math.sin(angle)*dist, 8, { plugin: { homing: true, baseSpeed: 3.2 }, render: {fillStyle: '#22d3ee', strokeStyle: '#ffffff', lineWidth: 2} })];
+                }
+            },
+            {
+                title: "THE ABYSS", tier: 'extreme', bgColor: '#000000', durationFrames: 2000, baseSpawnInterval: 20,
+                onTransitionStart: () => spawnWarpParticles(1, () => {
+                    // Massive menacing eye
+                    let p = Bodies.polygon(balloonCx, -200, 5, 100, { label: 'fx', isSensor: true, render: { fillStyle: 'transparent', strokeStyle: '#ef4444', lineWidth: 10 } });
+                    Body.setVelocity(p, { x: 0, y: 5 }); Body.setAngularVelocity(p, 0.05); return p;
+                }),
+                spawnFunc: () => {
+                    const angle = Math.random() * Math.PI * 2; const dist = Math.max(window.innerWidth, window.innerHeight) / 2 + 50;
+                    return [Bodies.polygon(balloonCx + Math.cos(angle)*dist, balloonCy + Math.sin(angle)*dist, 5, 22, { plugin: { homing: true, baseSpeed: 1.3 }, render: {fillStyle: '#7f1d1d', strokeStyle: '#ef4444', lineWidth: 2} })];
+                }
+            }
+        ];
+
+        let levelsCleared = 0; let score = 0; let globalFrames = 0; let levelFrames = 0;
+        let isTransitioning = false; let transitionFrames = 0; const TRANSITION_DURATION = 180; // 3 seconds
+        let isSpawningPhase = false; let isGracePeriod = false; let graceFrames = 0; const GRACE_DURATION_FRAMES = 150; 
+        let comboCount = 0; let comboTimerFrames = 0; const COMBO_TIMEOUT = 90; 
+        let isGameOver = false; let activeObstacles = []; 
+        let currentLevelDef = null; let previousLevelDef = null; // Anti-repeat tracking
+
+        function triggerTransition(nextLevelDef) {
+            isTransitioning = true; transitionFrames = 0; document.body.classList.add('hyper-scroll');
+            
+            if (nextLevelDef.onTransitionStart) nextLevelDef.onTransitionStart(); // Fire Unique VFX
+            
+            const ui = document.getElementById('transitionUI'), tTitle = document.getElementById('transitionTitle'), tNext = document.getElementById('transitionNext');
+            ui.style.display = 'block'; tTitle.className = 'anim-pop'; tTitle.innerText = levelsCleared === 0 ? "SYSTEM BOOT" : "ALTITUDE CLEARED";
+            tNext.className = ''; tNext.style.opacity = '0';
+            
+            setTimeout(() => {
+                if(isGameOver) return; document.body.style.backgroundColor = nextLevelDef.bgColor;
+                tNext.innerText = `ENTERING: ${nextLevelDef.title}`; tNext.style.color = (nextLevelDef.tier === 'extreme') ? '#ef4444' : (nextLevelDef.tier === 'hard') ? '#facc15' : '#38bdf8';
+                tNext.className = 'anim-pop';
+            }, 800);
+            setTimeout(() => { if(isGameOver) return; tTitle.className = 'anim-fade'; tNext.className = 'anim-fade'; }, 2300);
+        }
+
+        function startRandomLevel() {
+            if (isGameOver) return;
+            let totalWeight = 0;
+            let weightedPool = levelDefinitions.map(level => {
+                let weight = 10;
+                if (level === previousLevelDef) weight = 0; // ANTI-REPEAT LOGIC
+                else {
+                    if (level.tier === 'easy') weight = Math.max(10, 100 - (score / 150)); 
+                    else if (level.tier === 'medium') weight = 50; 
+                    else if (level.tier === 'hard') weight = score < 8000 ? 0 : Math.min(100, 2 + ((score - 8000) / 10000) * 98);
+                    else if (level.tier === 'extreme') weight = score < 15000 ? 0 : Math.min(100, 1 + ((score - 15000) / 10000) * 99);
+                }
+                totalWeight += weight; return { level: level, cumulativeWeight: totalWeight };
+            });
+
+            let randomPick = Math.random() * totalWeight;
+            currentLevelDef = weightedPool.find(w => randomPick <= w.cumulativeWeight).level;
+            previousLevelDef = currentLevelDef; 
+            
+            triggerTransition(currentLevelDef);
+        }
+
+        function updateThreatLevel() {
+            threatLevel = Math.floor(score / 1500); dynamicEnemyLimit = BASE_ENEMY_LIMIT + threatLevel; 
+            if (threatLevel > 0) document.getElementById('threatDisplay').innerText = `THREAT LEVEL: ${threatLevel} (Swarm Limit: ${dynamicEnemyLimit})`;
+            else document.getElementById('threatDisplay').innerText = "";
+        }
+
+        function addScore(points) { score += points; document.getElementById('scoreDisplay').innerText = score; updateThreatLevel(); updateAbilityUI(); }
+
+        function killEnemy(body, grantScore = true) {
+            if (!body.plugin.dead) {
+                Body.setStatic(body, false); body.plugin.dead = true; 
+                if (grantScore) {
+                    comboCount++; comboTimerFrames = COMBO_TIMEOUT;
+                    const comboUI = document.getElementById('comboDisplay');
+                    if (comboCount > 1) {
+                        comboUI.innerText = `${comboCount}x STREAK!`; comboUI.style.opacity = 1; comboUI.style.transform = `scale(1)`;
+                        setTimeout(() => { comboUI.style.transform = `scale(${1 + Math.min(comboCount * 0.1, 0.5)})`; }, 10);
+                    } addScore(comboCount); 
+                }
+                activeObstacles = activeObstacles.filter(b => b !== body);
+            }
+        }
+
+        function shatterBalloon() {
+            const bx = balloon.position.x, by = balloon.position.y, shards = [];
+            for (let i = 0; i < 15; i++) {
+                let shard = Bodies.polygon(bx + (Math.random()*30-15), by + (Math.random()*30-15), Math.floor(Math.random() * 3) + 3, Math.random() * 8 + 4, { frictionAir: 0.02, density: 0.05, render: { fillStyle: '#38bdf8', strokeStyle: '#fff', lineWidth: 1 } });
+                let angle = Math.random() * Math.PI * 2; let speed = Math.random() * 15 + 8;
+                Body.setVelocity(shard, { x: Math.cos(angle) * speed, y: Math.sin(angle) * speed }); Body.setAngularVelocity(shard, (Math.random() - 0.5) * 2); shards.push(shard);
+            } Composite.add(engine.world, shards);
+        }
+
+        function triggerGameOver() {
+            isGameOver = true; document.body.classList.remove('hyper-scroll'); document.getElementById('transitionUI').style.display = 'none';
+            document.body.style.cursor = 'default'; document.getElementById('controlsUI').style.display = 'none'; document.getElementById('abilitiesUI').style.display = 'none';
+            document.getElementById('gameOver').style.display = 'block'; document.getElementById('finalScore').innerText = `FINAL SCORE: ${score}`;
+            Body.setSensor(balloon, true); balloon.render.visible = false; if (aegisAura) aegisAura.render.visible = false;
+            shatterBalloon(); setTimeout(() => document.getElementById('playerName').focus(), 100);
+        }
+
+        startRandomLevel();
+
+        Events.on(engine, 'beforeUpdate', () => {
+            if (isGameOver) return;
+            shieldVx = targetMouseX - lastMouseX; shieldVy = targetMouseY - lastMouseY;
+            lastMouseX = targetMouseX; lastMouseY = targetMouseY;
+            Body.setPosition(shield, { x: targetMouseX, y: targetMouseY }); Body.setVelocity(shield, { x: 0, y: 0 }); Body.setPosition(aegisAura, balloon.position);
+
+            if (isTurretActive) {
+                turretFrames++; let cycleFrame = turretFrames % 420; 
+                if (cycleFrame < 120 && cycleFrame % 15 === 0) fireTurretBullet();
+                if (turretFrames >= 720) { isTurretActive = false; updateAbilityUI(); }
+            }
+
+            // Visual effects processing for warp particles
+            Composite.allBodies(engine.world).forEach(body => {
+                if(body.plugin && body.plugin.fxZigZag) {
+                    Body.setVelocity(body, { x: Math.sin(performance.now() * 0.02) * 10, y: body.velocity.y });
+                }
+            });
+
+            if (isTransitioning) return; // Freeze main enemies during warp
+
+            let progress = 0;
+            if (isSpawningPhase && currentLevelDef) progress = levelFrames / currentLevelDef.durationFrames; else if (!isGracePeriod) progress = 1; 
+            let speedMultiplier = currentLevelDef?.customSpeedCurve ? currentLevelDef.customSpeedCurve(progress) : 1 + (progress * 0.5); 
+
+            Composite.allBodies(engine.world).forEach(body => {
+                if (!body.plugin) return;
+                if (body.plugin.dead) { Body.setVelocity(body, { x: body.velocity.x * 0.99, y: body.velocity.y + 0.15 }); return; }
+
+                if (body.plugin.baseSpeed) {
+                    const angle = Math.atan2(balloon.position.y - body.position.y, balloon.position.x - body.position.x);
+                    const currentSpeed = body.plugin.baseSpeed * speedMultiplier;
+
+                    if (body.plugin.creeper) {
+                        body.plugin.dx = Math.cos(angle) * currentSpeed; body.plugin.dy = Math.sin(angle) * currentSpeed;
+                        Body.translate(body, { x: body.plugin.dx, y: body.plugin.dy });
+                        if (body.vertices.length === 3) Body.setAngle(body, angle + Math.PI / 2);
+                    } else if (body.plugin.homing) {
+                        // ZIG-ZAG LOGIC
+                        if (body.plugin.zigzag) {
+                            const wiggle = Math.sin(performance.now() * 0.01) * 6; // Amplitude 6
+                            Body.setVelocity(body, { x: Math.cos(angle) * currentSpeed + Math.cos(angle + Math.PI/2) * wiggle, y: Math.sin(angle) * currentSpeed + Math.sin(angle + Math.PI/2) * wiggle });
+                        } else {
+                            Body.setVelocity(body, { x: Math.cos(angle) * currentSpeed, y: Math.sin(angle) * currentSpeed });
+                        }
+                    }
+                }
+            });
+        });
+
+        Events.on(engine, 'afterUpdate', () => {
+            if (isGameOver) { Composite.allBodies(engine.world).forEach(body => { if (body.plugin && !body.plugin.dead) { Body.setStatic(body, false); body.plugin.dead = true; } }); return; }
+
+            if (Math.random() < 0.00037) {
+                let gem = Bodies.polygon(Math.random() * window.innerWidth, -50, 4, 18, { label: 'gem', frictionAir: 0.02, render: { fillStyle: '#d8b4fe', strokeStyle: '#a855f7', lineWidth: 3 } });
+                Body.setAngularVelocity(gem, 0.05); Composite.add(engine.world, gem);
+            }
+
+            if (comboTimerFrames > 0) {
+                comboTimerFrames--;
+                if (comboTimerFrames <= 0) { comboCount = 0; document.getElementById('comboDisplay').style.opacity = 0; document.getElementById('comboDisplay').style.transform = 'scale(1)'; }
+            }
+
+            if (isTransitioning) {
+                transitionFrames++; document.getElementById('timeDisplay').innerText = `WARPING TO NEW ALTITUDE...`;
+                if (transitionFrames >= TRANSITION_DURATION) {
+                    isTransitioning = false; document.body.classList.remove('hyper-scroll'); document.getElementById('transitionUI').style.display = 'none';
+                    isGracePeriod = true; graceFrames = 0; isSpawningPhase = false; levelsCleared++;
+                    const levelUI = document.getElementById('levelDisplay'); levelUI.innerText = `ALTITUDE ${levelsCleared}: ${currentLevelDef.title}`;
+                    levelUI.style.color = (currentLevelDef.tier === 'extreme') ? "#ef4444" : (currentLevelDef.tier === 'hard') ? "#facc15" : "#38bdf8";
+                } return;
+            }
+
+            if (!isGracePeriod) { globalFrames++; if (globalFrames >= 300) { addScore(1); globalFrames = 0; } }
+
+            activeObstacles = activeObstacles.filter(b => !b.plugin.dead && b.position.y < window.innerHeight + 300 && b.position.y > -300 && b.position.x > -300 && b.position.x < window.innerWidth + 300);
+
+            if (isGracePeriod && currentLevelDef) {
+                graceFrames++; document.getElementById('timeDisplay').innerText = `PREPARE. THREATS IN: ${Math.ceil((GRACE_DURATION_FRAMES - graceFrames) / 60)}s`;
+                if (graceFrames >= GRACE_DURATION_FRAMES) { isGracePeriod = false; isSpawningPhase = true; levelFrames = 0; }
+            } 
+            else if (isSpawningPhase && currentLevelDef) {
+                levelFrames++; document.getElementById('timeDisplay').innerText = `Approaching safe zone in: ${Math.ceil((currentLevelDef.durationFrames - levelFrames) / 60)}s`;
+                let dynamicSpawnInterval = Math.max(5, currentLevelDef.baseSpawnInterval - (threatLevel * 2));
+
+                if (levelFrames % dynamicSpawnInterval === 0 && activeObstacles.length < dynamicEnemyLimit) {
+                    let newBodies = currentLevelDef.spawnFunc().slice(0, dynamicEnemyLimit - activeObstacles.length);
+                    activeObstacles.push(...newBodies); Composite.add(engine.world, newBodies);
+                }
+                if (levelFrames >= currentLevelDef.durationFrames) { isSpawningPhase = false; document.getElementById('timeDisplay').innerText = "Entering next altitude..."; }
+            } 
+            else { if (activeObstacles.length === 0 && !isGracePeriod) startRandomLevel(); }
+
+            // Enhanced Garbage Collection (cleans up enemies, gems AND cinematic warp sensors)
+            Composite.allBodies(engine.world).forEach(body => {
+                 if (body.position.y > window.innerHeight + 300 || body.position.y < -400 || body.position.x < -400 || body.position.x > window.innerWidth + 400) {
+                     if (body.plugin && body.plugin.dead) Composite.remove(engine.world, body);
+                     else if (body.isSensor && body.label === 'fx') Composite.remove(engine.world, body);
+                 }
+            });
+        });
+
+        Events.on(engine, 'collisionStart', (event) => {
+            event.pairs.forEach(pair => {
+                const bodyA = pair.bodyA; const bodyB = pair.bodyB;
+                const isEnemyA = bodyA.plugin && (bodyA.plugin.creeper || bodyA.plugin.homing);
+                const isEnemyB = bodyB.plugin && (bodyB.plugin.creeper || bodyB.plugin.homing);
+
+                if (isEnemyA && isEnemyB) {
+                    if (bodyA.plugin.dead && !bodyB.plugin.dead) killEnemy(bodyB); else if (bodyB.plugin.dead && !bodyA.plugin.dead) killEnemy(bodyA);
+                }
+                if (bodyA.label === 'gem' || bodyB.label === 'gem') {
+                    const gem = bodyA.label === 'gem' ? bodyA : bodyB; const other = bodyA.label === 'gem' ? bodyB : bodyA;
+                    if (other.label === 'shield' || other.label === 'balloon') { gems++; saveEconomy(); Composite.remove(engine.world, gem); }
+                }
+                if (bodyA.label === 'bullet' || bodyB.label === 'bullet') {
+                    const bullet = bodyA.label === 'bullet' ? bodyA : bodyB; const other = bodyA.label === 'bullet' ? bodyB : bodyA;
+                    if (other.plugin && (other.plugin.creeper || other.plugin.homing) && !other.plugin.dead) { killEnemy(other); Composite.remove(engine.world, bullet); }
+                }
+
+                [bodyA, bodyB].forEach(body => {
+                    if (body.plugin && (body.plugin.creeper || body.plugin.homing)) {
+                        const other = bodyA === body ? bodyB : bodyA;
+                        if (other === shield) {
+                            killEnemy(body); const angle = Math.atan2(body.position.y - shield.position.y, body.position.x - shield.position.x);
+                            const baseBounce = 8; let finalVx = Math.cos(angle) * baseBounce + (shieldVx * 0.25); let finalVy = Math.sin(angle) * baseBounce + (shieldVy * 0.25);
+                            finalVx = Math.max(-30, Math.min(30, finalVx)); finalVy = Math.max(-30, Math.min(30, finalVy));
+                            Body.setVelocity(body, { x: finalVx, y: finalVy }); Body.setAngularVelocity(body, (Math.random() - 0.5) * 0.5);
+                        }
+                        if (isAegisActive && other === aegisAura) {
+                            killEnemy(body); const angle = Math.atan2(body.position.y - balloon.position.y, body.position.x - balloon.position.x);
+                            Body.setVelocity(body, { x: Math.cos(angle) * 15, y: Math.sin(angle) * 15 });
+                        }
+                    }
+                });
+
+                const labels = [bodyA.label, bodyB.label];
+                if (labels.includes('balloon') && !isAegisActive) {
+                    const other = bodyA.label === 'balloon' ? bodyB : bodyA;
+                    if (other !== shield && other !== anchor.bodyB && !isGameOver && other !== aegisAura && other.label !== 'gem' && other.label !== 'bullet' && other.label !== 'fx') {
+                        triggerGameOver();
+                    }
+                }
+            });
+        });
+
+        document.getElementById('playerName').addEventListener('keypress', function (e) { if (e.key === 'Enter') submitScore(); });
+
+        let lastFrameTime = performance.now(); const frameInterval = 1000 / 60; 
+        function runGameLoop(currentTime) {
+            requestAnimationFrame(runGameLoop); const elapsed = currentTime - lastFrameTime;
+            if (elapsed > frameInterval) {
+                lastFrameTime = currentTime - (elapsed % frameInterval);
+                if (!isPaused && !isViewingLeaderboard) Engine.update(engine, frameInterval);
+                Render.world(render);
+            }
+        }
+
+        requestAnimationFrame(runGameLoop); updateAbilityUI(); updateThreatLevel();
+        window.addEventListener('resize', () => { render.canvas.width = window.innerWidth; render.canvas.height = window.innerHeight; if (!isGameOver) Body.setPosition(balloon, { x: window.innerWidth / 2, y: window.innerHeight / 2}); });
+        // Listen for Force Pause command from CruzzClassroom
+        window.addEventListener('message', (event) => {
+        if (event.data === 'FORCE_PAUSE' && !isGameOver && !isTransitioning) {
+        isPaused = true; 
+        document.getElementById('pauseUI').style.display = 'block'; 
+        document.body.style.cursor = 'default';
+        }   
+    });
+    </script>
+</body>
+</html>

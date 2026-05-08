@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Block Blast - Smooth Placement</title>
+    <style>
+        :root {
+            --bg: #010409;
+            --grid-bg: #161b22;
+            --cell-empty: #21262d;
+            --cell-size: 50px;
+            --block-img: url('https://core-docs.s3.amazonaws.com/oregon_city_school_district_62_ar/directory/205899160/small_a5fa43fe-97da-4562-9943-37f20b4870c8.png');
+        }
+        body { 
+            background: var(--bg); color: white; font-family: 'Arial Black', sans-serif;
+            display: flex; flex-direction: column; align-items: center; 
+            touch-action: none; margin: 0; overflow: hidden; height: 100vh;
+        }
+        #header { margin-top: 20px; text-align: center; height: 100px; width: 100%; }
+        #score { font-size: 4rem; margin: 0; }
+        
+        #grid-container { padding: 15px; background: var(--grid-bg); border-radius: 20px; position: relative; }
+        #grid { display: grid; grid-template-columns: repeat(8, var(--cell-size)); gap: 6px; }
+        
+        .cell { width: var(--cell-size); height: var(--cell-size); background: var(--cell-empty); border-radius: 10px; transition: background 0.1s; }
+        .cell.filled { 
+            background-image: var(--block-img); background-size: cover; background-blend-mode: overlay;
+            animation: popIn 0.2s cubic-bezier(0.17, 0.89, 0.32, 1.49) forwards;
+        }
+
+        .cell.preview { 
+            background-color: rgba(255, 255, 255, 0.2) !important; 
+            border: 2px solid rgba(255,255,255,0.5);
+            transform: scale(0.95);
+        }
+
+        @keyframes popIn { 0% { transform: scale(0.8); } 100% { transform: scale(1); } }
+        
+        #hand { display: flex; gap: 30px; margin-top: 40px; height: 160px; align-items: center; }
+        .shape-container { padding: 10px; cursor: grab; }
+        .s-cell { width: 22px; height: 22px; border-radius: 5px; background-image: var(--block-img); background-size: cover; background-blend-mode: overlay; }
+
+        /* KEY FIX: Ensure the dragging clone never blocks the pointer detection */
+        .dragging { 
+            position: fixed; z-index: 9999; 
+            pointer-events: none !important; 
+            transform-origin: center center;
+            will-change: left, top, transform;
+        }
+        
+        .blasting { animation: blast 0.4s forwards; }
+        @keyframes blast { 0% { filter: brightness(3); } 100% { transform: scale(1.4); opacity: 0; } }
+    </style>
+</head>
+<body>
+
+<div id="header"><div id="score">0</div></div>
+<div id="grid-container"><div id="grid"></div></div>
+<div id="hand"></div>
+
+<script>
+    const GRID_SIZE = 8;
+    const COLORS = ['#FF4747', '#478BFF', '#47FF47', '#FFB147', '#E047FF', '#47FFF3'];
+    const SHAPES = [
+        { coords: [[0,0], [0,1], [1,0], [1,1]], w: 2, h: 2 }, 
+        { coords: [[0,0], [0,1], [0,2]], w: 3, h: 1 },         
+        { coords: [[0,0], [1,0], [2,0]], w: 1, h: 3 },         
+        { coords: [[0,0], [0,1], [0,2], [0,3]], w: 4, h: 1 },  
+        { coords: [[0,1], [1,0], [1,1], [1,2]], w: 3, h: 2 }
+    ];
+
+    let grid = [], score = 0, isDragging = false;
+    const gridEl = document.getElementById('grid');
+    const scoreEl = document.getElementById('score');
+
+    function init() {
+        grid = Array(GRID_SIZE).fill().map(() => Array(GRID_SIZE).fill(null));
+        gridEl.innerHTML = '';
+        for (let r = 0; r < GRID_SIZE; r++) {
+            for (let c = 0; c < GRID_SIZE; c++) {
+                const cell = document.createElement('div');
+                cell.className = 'cell'; cell.id = `c-${r}-${c}`;
+                gridEl.appendChild(cell);
+            }
+        }
+        spawnHand();
+    }
+
+    function spawnHand() {
+        const handEl = document.getElementById('hand');
+        handEl.innerHTML = '';
+        for (let i = 0; i < 3; i++) {
+            const s = { ...SHAPES[Math.floor(Math.random() * SHAPES.length)] };
+            s.color = COLORS[Math.floor(Math.random() * COLORS.length)];
+            createDraggable(s);
+        }
+    }
+
+    function createDraggable(shape) {
+        const container = document.createElement('div');
+        container.className = 'shape-container';
+        const sGrid = document.createElement('div');
+        sGrid.style.display = 'grid';
+        sGrid.style.gap = '4px';
+        sGrid.style.gridTemplateColumns = `repeat(${shape.w}, 22px)`;
+
+        shape.coords.forEach(([dr, dc]) => {
+            const sc = document.createElement('div');
+            sc.className = 's-cell';
+            sc.style.backgroundColor = shape.color;
+            sc.style.gridRow = dr + 1; sc.style.gridColumn = dc + 1;
+            sGrid.appendChild(sc);
+        });
+
+        container.appendChild(sGrid);
+        document.getElementById('hand').appendChild(container);
+
+        container.onpointerdown = (e) => {
+            if (isDragging) return;
+            isDragging = true;
+            
+            const pointerId = e.pointerId;
+            container.setPointerCapture(pointerId);
+            
+            const clone = container.cloneNode(true);
+            clone.classList.add('dragging');
+            const rect = container.getBoundingClientRect();
+            
+            document.body.appendChild(clone);
+            container.style.visibility = 'hidden';
+
+            const move = (evt) => {
+                if (evt.pointerId !== pointerId) return;
+
+                const scale = 2.4;
+                const w = rect.width * scale;
+                const h = rect.height * scale;
+                
+                // Position clone centered on pointer
+                clone.style.left = (evt.clientX - w / 2) + 'px';
+                clone.style.top = (evt.clientY - h / 2) + 'px';
+                clone.style.transform = `scale(${scale})`;
+                
+                // Optimized Preview Logic
+                document.querySelectorAll('.cell.preview').forEach(c => c.classList.remove('preview'));
+                
+                const target = getTarget(evt.clientX, evt.clientY, shape);
+                if (target) {
+                    shape.coords.forEach(([dr, dc]) => {
+                        const cell = document.getElementById(`c-${target.r + dr}-${target.c + dc}`);
+                        if (cell) cell.classList.add('preview');
+                    });
+                }
+            };
+
+            const up = (evt) => {
+                if (evt.pointerId !== pointerId) return;
+
+                const target = getTarget(evt.clientX, evt.clientY, shape);
+                if (target) {
+                    place(target.r, target.c, shape);
+                    container.remove();
+                    checkLines();
+                    if (document.getElementById('hand').children.length === 0) spawnHand();
+                } else {
+                    container.style.visibility = 'visible';
+                }
+                
+                clone.remove();
+                isDragging = false;
+                document.querySelectorAll('.cell.preview').forEach(c => c.classList.remove('preview'));
+                window.removeEventListener('pointermove', move);
+                window.removeEventListener('pointerup', up);
+            };
+
+            window.addEventListener('pointermove', move);
+            window.addEventListener('pointerup', up);
+        };
+    }
+
+    function getTarget(x, y, shape) {
+        // Use elementFromPoint to find the grid cell beneath the pointer
+        // pointer-events: none on the clone ensures we "see through" the held piece
+        const el = document.elementFromPoint(x, y);
+        if (!el || !el.classList.contains('cell')) return null;
+
+        const [_, r, c] = el.id.split('-');
+        // Calculate the top-left origin of where the shape should start
+        const tr = parseInt(r) - Math.floor(shape.h / 2);
+        const tc = parseInt(c) - Math.floor(shape.w / 2);
+        
+        // Bounds and Collision Check
+        const canFit = shape.coords.every(([dr, dc]) => {
+            const nr = tr + dr, nc = tc + dc;
+            return nr >= 0 && nr < GRID_SIZE && nc >= 0 && nc < GRID_SIZE && !grid[nr][nc];
+        });
+        
+        return canFit ? { r: tr, c: tc } : null;
+    }
+
+    function place(r, c, shape) {
+        shape.coords.forEach(([dr, dc]) => {
+            const nr = r + dr, nc = c + dc;
+            grid[nr][nc] = shape.color;
+            const el = document.getElementById(`c-${nr}-${nc}`);
+            el.className = 'cell filled';
+            el.style.backgroundColor = shape.color;
+        });
+        score += shape.coords.length;
+        scoreEl.innerText = score;
+    }
+
+    function checkLines() {
+        let rs = [], cs = [];
+        for (let i = 0; i < GRID_SIZE; i++) {
+            if (grid[i].every(v => v !== null)) rs.push(i);
+            if (grid.every(row => row[i] !== null)) cs.push(i);
+        }
+        if (rs.length + cs.length > 0) {
+            score += (rs.length + cs.length) * 100;
+            scoreEl.innerText = score;
+            rs.forEach(r => {
+                for (let i = 0; i < GRID_SIZE; i++) blast(r, i);
+                grid[r] = Array(GRID_SIZE).fill(null);
+            });
+            cs.forEach(c => {
+                for (let i = 0; i < GRID_SIZE; i++) blast(i, c);
+                grid.forEach(row => row[c] = null);
+            });
+        }
+    }
+
+    function blast(r, c) {
+        const el = document.getElementById(`c-${r}-${c}`);
+        el.classList.add('blasting');
+        setTimeout(() => { el.className = 'cell'; el.style.backgroundColor = ''; }, 400);
+    }
+
+    init();
+</script>
+</body>
+</html>
