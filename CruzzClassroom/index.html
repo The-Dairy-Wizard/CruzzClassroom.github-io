@@ -8,6 +8,20 @@
     <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700&family=Playfair+Display:ital,wght@0,400;1,700&family=Special+Elite&display=swap" rel="stylesheet">
 </head>
 <body>
+    <div id="fx-survival" class="bg-fx">
+        <div class="survivor-sphere" style="top: 15%; animation-delay: 0s;"></div>
+        <div class="survivor-sphere" style="top: 40%; animation-delay: 4s; transform: scale(1.2);"></div>
+        <div class="survivor-sphere" style="top: 70%; animation-delay: 2s; transform: scale(0.8);"></div>
+        <div class="survivor-sphere" style="top: 85%; animation-delay: 7s;"></div>
+    </div>
+    
+    <div id="fx-blast" class="bg-fx">
+        <div class="blast-block" style="left: 10%; animation-delay: 0s;"></div>
+        <div class="blast-block" style="left: 30%; animation-delay: 3s; width: 60px; height: 60px;"></div>
+        <div class="blast-block" style="left: 60%; animation-delay: 1s;"></div>
+        <div class="blast-block" style="left: 85%; animation-delay: 4.5s; width: 20px; height: 20px;"></div>
+    </div>
+
     <div class="overlay"></div>
 
     <div id="announcement-banner" style="display: none;">
@@ -47,7 +61,7 @@
                         <button class="play-btn" onclick="openDetails('balloon')">View Exhibit</button>
                     </li>
                     <li class="game-item">
-                        <span class="game-title">CruzzSurvival</span>
+                        <span class="game-title">CruzzSurvivor</span>
                         <button class="play-btn" onclick="openDetails('survival')">View Exhibit</button>
                     </li>
                     <li class="game-item">
@@ -57,6 +71,10 @@
                     <li class="game-item">
                         <span class="game-title">Cruzz Snake</span>
                         <button class="play-btn" onclick="openDetails('snake')">View Exhibit</button>
+                    </li>
+                    <li class="game-item">
+                        <span class="game-title">Cruzz Pong</span>
+                        <button class="play-btn" onclick="openDetails('pong')">View Exhibit</button>
                     </li>
                 </ul>
             </div>
@@ -72,20 +90,13 @@
 
             <div id="player-view" style="display: none;">
                 <div class="game-frame-container" id="fullscreen-wrapper">
-                    
                     <div id="pause-guard" style="display: none;">
                         <h2 class="status-text" style="color: #ef4444;">EXHIBIT PAUSED</h2>
                         <p style="font-family: 'Special Elite', cursive; margin-bottom: 20px;">This simulation requires maximum focus (Fullscreen).</p>
                         <button class="play-btn" onclick="resumeFullscreen()">RESUME FULLSCREEN</button>
                         <button class="back-btn" onclick="closeGame()" style="margin-left: 10px;">ABORT</button>
                     </div>
-
-                    <iframe 
-                        id="game-engine" 
-                        sandbox="allow-scripts allow-forms allow-modals allow-same-origin" 
-                        allow="fullscreen"
-                        src="">
-                    </iframe>
+                    <iframe id="game-engine" sandbox="allow-scripts allow-forms allow-modals allow-same-origin" allow="fullscreen" src=""></iframe>
                 </div>
             </div>
         </main>
